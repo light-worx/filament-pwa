@@ -10,8 +10,13 @@ php artisan vendor:publish --tag=filament-pwa-assets
 
 ## Usage
 
-In your AdminPanelProvider
+After publishing assets, add the following to your main layout:
 
-use Lightworx\FilamentPwa\FilamentPwaPlugin;
+    <link rel="manifest" href="/pwa/manifest.json">
+    <meta name="theme-color" content="#4f46e5">
 
-FilamentPwaPlugin::make() 
+    <script>
+        if ('serviceWorker' in navigator') {
+          navigator.serviceWorker.register('/pwa/service-worker.js');
+        }
+    </script>
