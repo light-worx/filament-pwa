@@ -1,0 +1,56 @@
+{
+    "name": "light-worx/filament-pwa",
+    "description": "Filament PWA",
+    "keywords": [
+        "light-worx",
+        "laravel",
+        "filament-pwa"
+    ],
+    "homepage": "https://github.com/light-worx/filament-pwa",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Michael Bishop",
+            "email": "admin@lightworx.co.za",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "filament/filament": "^4.0|^5.0",
+        "laravel-notification-channels/webpush": "^10.4"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.13.1",
+        "nunomaduro/collision": "^7.8.1|^8.0",
+        "orchestra/testbench": "^9.0|^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Lightworx\\FilamentPwa\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+        }
+    },
+    "scripts": {
+        
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Lightworx\\FilamentPwa\\FilamentPwaServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
