@@ -1,7 +1,7 @@
 {
     "name": "Filament Admin",
     "short_name": "Filament",
-    "start_url": "/admin",
+    "start_url": "/app",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#4f46e5",

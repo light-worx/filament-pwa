@@ -11,6 +11,9 @@ class FilamentPwaServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../resources/public' => public_path(),
         ], 'filament-pwa-assets');
+        $this->publishes([
+            __DIR__.'/../resources/views/pwa' => resource_path('views/vendor/pwa'),
+        ], 'filament-pwa-views');
         $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
     }
 }
