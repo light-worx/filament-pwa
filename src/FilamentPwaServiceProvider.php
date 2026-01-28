@@ -5,7 +5,7 @@ namespace Lightworx\FilamentPwa;
 use Illuminate\Support\ServiceProvider;
 
 
-class PwaServiceProvider extends ServiceProvider
+class FilamentPwaServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {

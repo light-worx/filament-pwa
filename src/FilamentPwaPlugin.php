@@ -5,7 +5,7 @@ namespace Lightworx\FilamentPwa;
 use Filament\Contracts\Plugin;
 use Filament\Panel;
 
-class PwaPlugin implements Plugin
+class FilamentPwaPlugin implements Plugin
 {
     public function getId(): string
     {
