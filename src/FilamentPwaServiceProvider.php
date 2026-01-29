@@ -3,6 +3,7 @@
 namespace Lightworx\FilamentPwa;
 
 use Illuminate\Support\ServiceProvider;
+use Lightworx\FilamentPwa\Console\InstallFilamentPwaCommand;
 
 class FilamentPwaServiceProvider extends ServiceProvider
 {
@@ -23,5 +24,11 @@ class FilamentPwaServiceProvider extends ServiceProvider
             __DIR__.'/../resources/public/register.js'       => public_path('register.js'),
             __DIR__.'/../resources/public/pwa'               => public_path('pwa'),
         ], 'filament-pwa-assets');
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                InstallFilamentPwaCommand::class,
+            ]);
+        }
     }
 }
