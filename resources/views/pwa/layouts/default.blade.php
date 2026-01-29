@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $title ?? 'PWA App' }}</title>
-    <link rel="manifest" href="{{ asset('pwa/manifest.json') }}">
+    <link rel="manifest" href="{{ asset('manifest.json') }}">
     <meta name="theme-color" content="{{ $themeColor ?? '#4f46e5' }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -50,7 +50,7 @@
     </script>
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('{{ asset('pwa/service-worker.js') }}', { scope: '/' })
+            navigator.serviceWorker.register('{{ asset('service-worker.js') }}', { scope: '/' })
                 .then(function(registration) {
                     console.log('Service Worker registered with scope:', registration.scope);
                 })
