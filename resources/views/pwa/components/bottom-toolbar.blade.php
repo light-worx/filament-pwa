@@ -1,7 +1,13 @@
-<nav class="navbar fixed-bottom navbar-light bg-light border-top">
-    <div class="container justify-content-around">
-        <a href="#" class="nav-link">Home</a>
-        <a href="#" class="nav-link">Search</a>
-        <a href="#" class="nav-link">Settings</a>
+<nav class="bottom-toolbar">
+    <div class="d-flex justify-content-around">
+        <a href="{{ route('app.home') }}" class="nav-link active">
+            <i class="bi bi-house-door-fill"></i>Home
+        </a>
+        <a href="{{ route('app.home') }}" class="nav-link active">
+            <i class="bi bi-house-door-fill"></i>Home
+        </a>
+        <a href="{{ route('app.home') }}" class="nav-link active">
+            <i class="bi bi-house-door-fill"></i>Home
+        </a>
     </div>
 </nav>
