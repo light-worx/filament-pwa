@@ -1,5 +1,6 @@
 <?php
 
 return [
-    'app_route' => '/pwa'
+    'app_route' => '/app',
+    'theme_color' => '#333333',
 ];

@@ -12,7 +12,9 @@ class FilamentPwaServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../resources/public' => public_path(),
         ], 'filament-pwa-assets');
-
+        $this->publishes([
+            __DIR__.'/Config/pwa.php' => config_path('pwa.php'),
+        ]);
         $this->publishes([
             __DIR__.'/../resources/views/pwa' => resource_path('views/vendor/pwa'),
         ], 'filament-pwa-views');
@@ -20,7 +22,6 @@ class FilamentPwaServiceProvider extends ServiceProvider
 
         $this->publishes([
             __DIR__.'/../resources/public/service-worker.js' => public_path('service-worker.js'),
-            __DIR__.'/../resources/public/manifest.json'     => public_path('manifest.json'),
             __DIR__.'/../resources/public/register.js'       => public_path('register.js'),
             __DIR__.'/../resources/public/pwa'               => public_path('pwa'),
         ], 'filament-pwa-assets');
@@ -30,5 +31,10 @@ class FilamentPwaServiceProvider extends ServiceProvider
                 InstallFilamentPwaCommand::class,
             ]);
         }
+    }
+
+    public function register(): void
+    {
+        $this->mergeConfigFrom(__DIR__ . '/Config/pwa.php',  'pwa');
     }
 }

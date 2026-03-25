@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $title ?? 'PWA App' }}</title>
-    <link rel="manifest" href="{{ asset('manifest.json') }}">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="{{ config('pwa.theme_color') }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="vapid-key" content="{{ config('webpush.vapid.public_key') }}">
-    <meta name="theme-color" content="{{ $themeColor ?? '#4f46e5' }}">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ asset('pwa/css/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ asset('pwa/css/app.css') }}" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         body { padding-top: 56px; padding-bottom: 56px; }
         .slide-menu { position: fixed; top: 0; left: -250px; width: 250px; height: 100%; background: #fff; box-shadow: 2px 0 6px rgba(0,0,0,0.2); transition: left 0.3s ease; z-index: 1050; }
@@ -38,7 +38,7 @@
     @include('vendor.pwa.components.bottom-toolbar')
 
     {{-- Scripts --}}
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ asset('pwa/js/bootstrap.bundle.min.js') }}"></script>
     <script>
         const menu = document.getElementById('slideMenu');
         const overlay = document.getElementById('menuOverlay');
