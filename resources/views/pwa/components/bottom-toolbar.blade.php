@@ -1,13 +1,11 @@
-<nav class="bottom-toolbar">
-    <div class="d-flex justify-content-around">
-        <a href="{{ route('app.home') }}" class="nav-link active">
-            <i class="bi bi-house-door-fill"></i>Home
-        </a>
-        <a href="{{ route('app.home') }}" class="nav-link active">
-            <i class="bi bi-house-door-fill"></i>Home
-        </a>
-        <a href="{{ route('app.home') }}" class="nav-link active">
-            <i class="bi bi-house-door-fill"></i>Home
-        </a>
-    </div>
-</nav>
+<footer class="bottom-toolbar d-flex justify-content-around align-items-center fixed-bottom py-2">
+    <a href="#" class="text-center">
+        <i class="bi bi-house fs-4 d-block"></i>
+    </a>
+    <a href="#" class="text-center">
+        <i class="bi bi-search fs-4 d-block"></i>
+    </a>
+    <a href="#" class="text-center">
+        <i class="bi bi-gear fs-4 d-block"></i>
+    </a>
+</footer>

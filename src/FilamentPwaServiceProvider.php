@@ -4,6 +4,8 @@ namespace Lightworx\FilamentPwa;
 
 use Illuminate\Support\ServiceProvider;
 use Lightworx\FilamentPwa\Console\InstallFilamentPwaCommand;
+use Lightworx\FilamentPwa\Livewire\PwaUserSettings;
+use Livewire\Livewire;
 
 class FilamentPwaServiceProvider extends ServiceProvider
 {
@@ -17,7 +19,7 @@ class FilamentPwaServiceProvider extends ServiceProvider
         ]);
         $this->publishes([
             __DIR__.'/../resources/views/pwa' => resource_path('views/vendor/pwa'),
-        ], 'filament-pwa-views');
+        ], 'filament-pwa');
         $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
 
         $this->publishes([
@@ -25,12 +27,14 @@ class FilamentPwaServiceProvider extends ServiceProvider
             __DIR__.'/../resources/public/register.js'       => public_path('register.js'),
             __DIR__.'/../resources/public/pwa'               => public_path('pwa'),
         ], 'filament-pwa-assets');
-
+        $this->loadMigrationsFrom(__DIR__.'/Database/migrations');
         if ($this->app->runningInConsole()) {
             $this->commands([
                 InstallFilamentPwaCommand::class,
             ]);
         }
+        $this->loadViewsFrom(__DIR__.'/../resources/views/pwa', 'filament-pwa');
+        Livewire::component('pwa-user-settings', PwaUserSettings::class);
     }
 
     public function register(): void

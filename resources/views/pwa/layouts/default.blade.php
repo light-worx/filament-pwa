@@ -12,21 +12,98 @@
     <link href="{{ asset('pwa/css/app.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
-        body { padding-top: 56px; padding-bottom: 56px; }
-        .slide-menu { position: fixed; top: 0; left: -250px; width: 250px; height: 100%; background: #fff; box-shadow: 2px 0 6px rgba(0,0,0,0.2); transition: left 0.3s ease; z-index: 1050; }
-        .slide-menu.open { left: 0; }
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: none; z-index: 1040; }
-        .overlay.show { display: block; }
+        body {
+            padding-top: 56px;
+            padding-bottom: 60px;
+            background: #f5f6f8;
+        }
+
+        /* ===============================
+        TOP / BOTTOM TOOLBARS
+        =============================== */
+        .top-toolbar {
+            background: #ffffff;
+            border-bottom: 1px solid #e5e5e5;
+            z-index: 1030;
+        }
+
+        .bottom-toolbar {
+            background: #1f2937;
+            color: #fff;
+            z-index: 1030;
+        }
+
+        .bottom-toolbar a {
+            color: #cbd5e1;
+        }
+
+        .bottom-toolbar a.active {
+            color: #ffffff;
+        }
+
+        /* ===============================
+        SLIDE MENUS
+        =============================== */
+        .slide-menu {
+            position: fixed;
+            top: 0;
+            width: 280px;
+            height: 100%;
+            background: #ffffff;
+            box-shadow: 0 0 20px rgba(0,0,0,0.15);
+            transition: transform 0.3s ease;
+            z-index: 1050;
+            overflow-y: auto;
+        }
+
+        .slide-menu.left {
+            left: 0;
+            transform: translateX(-100%);
+        }
+
+        .slide-menu.right {
+            right: 0;
+            transform: translateX(100%);
+        }
+
+        .slide-menu.open {
+            transform: translateX(0);
+        }
+
+        /* ===============================
+        OVERLAY
+        =============================== */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.35);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease;
+            z-index: 1040;
+        }
+
+        .overlay.show {
+            opacity: 1;
+            visibility: visible;
+            backdrop-filter: blur(2px);
+        }
     </style>
 </head>
 <body>
     {{-- Top toolbar --}}
     @include('vendor.pwa.components.top-toolbar')
 
-    {{-- Slide-over menu --}}
-    <div class="slide-menu" id="slideMenu">
+    {{-- Left Menu (Navigation) --}}
+    <div class="slide-menu left" id="leftMenu">
         @include('vendor.pwa.components.slide-menu')
     </div>
+
+    {{-- Right Menu (User Settings) --}}
+    <div class="slide-menu right" id="rightMenu">
+        @livewire('pwa-user-settings', ['device_id' => '']) {{-- device_id will be set via JS --}}
+    </div>
+
     <div class="overlay" id="menuOverlay"></div>
 
     {{-- Main content --}}
@@ -40,190 +117,115 @@
     {{-- Scripts --}}
     <script src="{{ asset('pwa/js/bootstrap.bundle.min.js') }}"></script>
     <script>
-        const menu = document.getElementById('slideMenu');
+        const leftMenu = document.getElementById('leftMenu');
+        const rightMenu = document.getElementById('rightMenu');
         const overlay = document.getElementById('menuOverlay');
-        document.getElementById('hamburgerBtn').addEventListener('click', () => {
+
+        const openMenu = (menu) => {
             menu.classList.add('open');
             overlay.classList.add('show');
-        });
-        overlay.addEventListener('click', () => {
-            menu.classList.remove('open');
+        };
+
+        const closeMenus = () => {
+            leftMenu.classList.remove('open');
+            rightMenu.classList.remove('open');
             overlay.classList.remove('show');
+        };
+
+        document.getElementById('hamburgerBtn')
+            ?.addEventListener('click', () => openMenu(leftMenu));
+
+        document.getElementById('userMenuBtn')
+            ?.addEventListener('click', () => openMenu(rightMenu));
+
+        overlay.addEventListener('click', closeMenus);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeMenus();
         });
     </script>
     <script src="{{ asset('pwa/js/push-notifications.js') }}"></script>
     <script>
         /* ===============================
-        SERVICE WORKER REGISTRATION
+        SERVICE WORKER & PUSH SUBSCRIPTION
         =============================== */
-        let swRegistration = null;
-        let pendingWorker = null;
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!('serviceWorker' in navigator) || !window.Livewire) return;
 
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/service-worker.js')
-                .then(reg => {
-                    console.log('Service Worker registered:', reg);
-                    swRegistration = reg;
+            const registration = await navigator.serviceWorker.register('/service-worker.js')
+                .then(reg => reg)
+                .catch(err => { console.error('SW failed', err); return null; });
 
-                    // Helper function to request info from a specific worker
-                    const requestUpdateInfo = (worker) => {
-                        const channel = new MessageChannel();
-                        channel.port1.onmessage = (event) => {
-                            if (event.data) {
-                                // Now version and notes are defined from the SW's response
-                                const { version, notes } = event.data;
-                                showUpdateBanner(worker, version, notes);
-                            }
-                        };
-                        // This sends the "ping" to the Service Worker
-                        worker.postMessage({ action: 'getVersionInfo' }, [channel.port2]);
-                    };
+            if (!registration) return;
 
-                    // 1. If an update is already waiting (user refreshed but didn't update yet)
-                    if (reg.waiting) {
-                        requestUpdateInfo(reg.waiting);
-                    }
-
-                    // 2. If a new update is found and finishes installing
-                    reg.addEventListener('updatefound', () => {
-                        const newWorker = reg.installing;
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                requestUpdateInfo(newWorker);
-                            }
-                        });
-                    });
-                })
-                .catch(err => console.error('Service Worker registration failed:', err));
-        }
-
-        // Reload when new SW takes control
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            window.location.reload();
-        });
-
-        /* ===============================
-        UPDATE BANNER
-        =============================== */
-        function showUpdateBanner(worker, version, notes) {
-            const banner = document.getElementById('pwa-update');
-            const btn = document.getElementById('pwa-update-btn');
-            const versionSpan = document.getElementById('pwa-version');
-            const notesDiv = document.getElementById('pwa-notes');
-
-            if (!banner || !btn) return;
-
-            // Inject the data into the HTML
-            if (versionSpan) versionSpan.textContent = version;
-            if (notesDiv) notesDiv.textContent = notes;
-
-            banner.classList.remove('d-none');
-
-            btn.onclick = () => {
-                worker.postMessage({ action: 'skipWaiting' });
-                // The SW will skipWaiting, and the controllerchange 
-                // listener (if you have one) will reload the page.
-                window.location.reload(); 
-            };
-        }
-        document.addEventListener('livewire:load', () => {
-            Livewire.hook('message.processed', () => {});
-
-            Livewire.on('notify', (payload) => {
-                const { type, message } = payload;
-                // Example: simple toast using Bootstrap
-                const toastEl = document.createElement('div');
-                toastEl.className = `toast align-items-center text-bg-${type} border-0`;
-                toastEl.innerHTML = `
-                    <div class="d-flex">
-                        <div class="toast-body">${message}</div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-                    </div>
-                `;
-                document.body.appendChild(toastEl);
-                const toast = new bootstrap.Toast(toastEl, { delay: 3000 });
-                toast.show();
-            });
-        });
-
-        /* ===============================
-        INSTALL PROMPT
-        =============================== */
-        window.deferredPrompt = null;
-
-        window.addEventListener('beforeinstallprompt', e => {
-            e.preventDefault();
-            window.deferredPrompt = e;
-
-            const btn = document.getElementById('install-app');
-            if (btn) btn.classList.remove('d-none');
-        });
-
-        /* ===============================
-        DOM READY
-        =============================== */
-        document.addEventListener('DOMContentLoaded', () => {
-
-            /* ---- Install button ---- */
-            const installBtn = document.getElementById('install-app');
-            if (installBtn) {
-                installBtn.onclick = async () => {
-                    if (!window.deferredPrompt) return;
-
-                    window.deferredPrompt.prompt();
-                    const { outcome } = await window.deferredPrompt.userChoice;
-
-                    window.deferredPrompt = null;
-                    installBtn.classList.add('d-none');
-
-                    console.log('Install outcome:', outcome);
-                };
+            // Subscribe to push if needed
+            let subscription = await registration.pushManager.getSubscription();
+            if (!subscription && 'PushManager' in window) {
+                const vapidKey = '{{ config("webpush.vapid.public_key") }}';
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: vapidKey
+                });
             }
 
-            /* ---- Enable Push button ---- */
+            if (!subscription) return;
+
+            const endpoint = subscription.endpoint;
+            const keys = {
+                p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
+                auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+            };
+
+            // Mount the Livewire component for this device
+            const userSettingsComponent = Livewire.find(rightMenu.querySelector('[wire\\:id]')?.getAttribute('wire:id'));
+            if (userSettingsComponent) {
+                // Set device_id dynamically
+                userSettingsComponent.set('device_id', endpoint);
+
+                // Save push subscription to the backend
+                userSettingsComponent.call('savePushSubscription', endpoint, keys);
+            }
+            document.addEventListener('DOMContentLoaded', () => {
             const enablePushBtn = document.getElementById('enable-push');
 
-            if (
-                enablePushBtn &&
-                'Notification' in window &&
-                Notification.permission === 'default'
-            ) {
-                enablePushBtn.hidden = false;
+            if (!enablePushBtn || !('Notification' in window) || Notification.permission !== 'default') return;
 
-                enablePushBtn.onclick = async () => {
-                    try {
-                        if (!window.pushNotifications) {
-                            alert('Push notifications not available');
-                            return;
-                        }
+            enablePushBtn.classList.remove('d-none');
 
-                        await window.pushNotifications.subscribe();
-                        enablePushBtn.hidden = true;
-                        alert('Push notifications enabled!');
-                    } catch (e) {
-                        console.error('Push enable failed:', e);
-                        alert('Failed to enable notifications');
+            enablePushBtn.onclick = async () => {
+                try {
+                    const registration = await navigator.serviceWorker.ready;
+                    const vapidKey = '{{ config("webpush.vapid.public_key") }}';
+
+                    const subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: vapidKey
+                    });
+
+                    const endpoint = subscription.endpoint;
+                    const keys = {
+                        p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
+                        auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+                    };
+
+                    // Save subscription via Livewire component
+                    const rightMenu = document.getElementById('rightMenu');
+                    const userSettingsComponent = Livewire.find(rightMenu.querySelector('[wire\\:id]')?.getAttribute('wire:id'));
+                    if (userSettingsComponent) {
+                        userSettingsComponent.set('device_id', endpoint);
+                        userSettingsComponent.call('savePushSubscription', endpoint, keys);
                     }
-                };
-            }
 
-            /* ---- Auto-subscribe if already granted ---- */
-            setTimeout(async () => {
-                if (!window.pushNotifications) return;
-
-                const status = await window.pushNotifications.checkStatus();
-
-                if (status.permission === 'granted' && !status.subscribed) {
-                    await window.pushNotifications.subscribe();
+                    enablePushBtn.classList.add('d-none');
+                    alert('Push notifications enabled!');
+                } catch (e) {
+                    console.error('Push enable failed:', e);
+                    alert('Failed to enable push notifications.');
                 }
-
-                if (status.subscribed && enablePushBtn) {
-                    enablePushBtn.style.display = 'none';
-                }
-            }, 1000);
+            };
+        });
         });
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     @stack('scripts')
 </body>
 </html>

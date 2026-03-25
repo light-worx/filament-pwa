@@ -3,11 +3,15 @@
 use Illuminate\Support\Facades\Route;
 use Lightworx\FilamentPwa\Http\Controllers\PushSubscriptionController;
 
-Route::middleware('auth')->group(function () {
-    Route::post('/app/subscribe', [PushSubscriptionController::class, 'store'])->name('pwa.subscribe');
-});
+Route::middleware(['web'])->group(function () {
 
-Route::get(config('pwa.app_route'), function () { return view('vendor.pwa.pages.home'); })->name('app.home');
+    Route::get(config('pwa.app_route'), function () {
+        return view('vendor.pwa.pages.home');
+    })->name('app.home');
+
+    Route::post('/app/subscribe', [PushSubscriptionController::class, 'store'])
+        ->name('pwa.subscribe');
+});
 
 Route::get('/manifest.json', function () {
     return response()->json([

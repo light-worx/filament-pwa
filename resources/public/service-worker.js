@@ -1,29 +1,26 @@
-const CACHE = 'filament-pwa-v1';
+const CACHE = 'filament-pwa-v2';
 
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE).then(cache => cache.addAll([
-        '/',
-        '/admin'
+            '/pwa/css/bootstrap.min.css',
+            '/pwa/css/app.css',
+            '/pwa/js/bootstrap.bundle.min.js'
         ]))
     );
 });
 
-
 self.addEventListener('fetch', event => {
+    const request = event.request;
+
+    if (request.headers.get('accept')?.includes('text/html')) {
+        return;
+    }
+
+    // Cache-first for assets
     event.respondWith(
-        fetch(event.request).catch(() => caches.match(event.request))
-    );
-});
-
-
-self.addEventListener('push', event => {
-    const data = event.data.json();
-    event.waitUntil(
-        self.registration.showNotification(data.title, {
-            body: data.body,
-            icon: data.icon,
-            data: data.data
+        caches.match(request).then(response => {
+            return response || fetch(request);
         })
     );
 });
