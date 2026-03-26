@@ -36,7 +36,8 @@ class InstallFilamentPwaCommand extends Command
 
         // ── Publish assets ────────────────────────────────────────────────────
         $this->callSilently('vendor:publish', [
-            '--tag'   => 'filament-pwa-assets',
+
+            '--provider="Lightworx\FilamentPwa\FilamentPwaServiceProvider"',
             '--force' => true,
         ]);
         $this->info('  ✓ Assets published');

@@ -19,6 +19,7 @@
 
     {{-- Emit theme as CSS custom properties so any override is a config change --}}
     <style>
+        a { text-decoration: none; }
         :root {
             --pwa-primary:       {{ config('pwa.theme.primary',      '#1f2937') }};
             --pwa-accent:        {{ config('pwa.theme.accent',       '#3b82f6') }};
