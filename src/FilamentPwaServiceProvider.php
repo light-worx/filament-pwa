@@ -4,6 +4,7 @@ namespace Lightworx\FilamentPwa;
 
 use Illuminate\Support\ServiceProvider;
 use Lightworx\FilamentPwa\Console\InstallFilamentPwaCommand;
+use Lightworx\FilamentPwa\Services\PushNotificationService;
 
 class FilamentPwaServiceProvider extends ServiceProvider
 {
@@ -47,5 +48,9 @@ class FilamentPwaServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__ . '/Config/pwa.php', 'pwa');
+
+        // Register PushNotificationService as a singleton so the WebPush
+        // client (and its HTTP connection pool) is reused within a request.
+        $this->app->singleton(PushNotificationService::class);
     }
 }

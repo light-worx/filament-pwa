@@ -1,4 +1,4 @@
-@extends('vendor.pwa.layouts.default')
+@extends('vendor.pwa.layouts.app')
 
 @section('content')
     <h1>Welcome to your PWA!</h1>

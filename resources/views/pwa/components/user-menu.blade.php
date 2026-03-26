@@ -1,10 +1,4 @@
 @php
-/*
- * Build the country list for the phone dial-code selector.
- * ALL_COUNTRIES is the master list of [iso, dialCode, name].
- * If config('pwa.phone_countries') is non-empty, we filter to those codes.
- * The default country is config('pwa.phone_default_country', 'ZA').
- */
 $allCountries = [
     ['ZA','+27','South Africa'],['US','+1','United States'],['GB','+44','United Kingdom'],
     ['AU','+61','Australia'],['NZ','+64','New Zealand'],['CA','+1','Canada'],
@@ -41,27 +35,25 @@ $defaultCountry = strtoupper(config('pwa.phone_default_country', 'ZA'));
 
 if (!empty($allowedCodes)) {
     $allowedCodes = array_map('strtoupper', $allowedCodes);
-    $countries    = array_filter($allCountries, fn($c) => in_array($c[0], $allowedCodes));
-    // Ensure default is first
-    usort($countries, fn($a, $b) =>
-        ($b[0] === $defaultCountry) - ($a[0] === $defaultCountry)
-        ?: strcmp($a[2], $b[2])
-    );
+    $countries    = array_values(array_filter($allCountries, fn($c) => in_array($c[0], $allowedCodes)));
 } else {
-    // All countries — default first, rest alphabetical
-    usort($allCountries, fn($a, $b) =>
-        ($b[0] === $defaultCountry) - ($a[0] === $defaultCountry)
-        ?: strcmp($a[2], $b[2])
-    );
     $countries = $allCountries;
 }
+usort($countries, fn($a, $b) =>
+    ($b[0] === $defaultCountry) - ($a[0] === $defaultCountry) ?: strcmp($a[2], $b[2])
+);
 @endphp
 
 <style>
-    .pwa-user-panel { background: #f8fafc; height: 100%; }
-    .pwa-user-panel .card { border-radius: 14px; }
+    .pwa-user-panel {
+        background: #f8fafc;
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    .pwa-user-panel .card         { border-radius: 14px; }
     .pwa-user-panel .form-control,
-    .pwa-user-panel .form-select {
+    .pwa-user-panel .form-select  {
         border-radius: 10px;
         border: 1px solid #e5e7eb;
         font-size: .875rem;
@@ -76,22 +68,36 @@ if (!empty($allowedCodes)) {
         border-color: var(--pwa-accent, #3b82f6);
     }
     .verified-badge {
-        font-size: .7rem; font-weight: 600;
-        padding: 2px 8px; border-radius: 20px;
+        font-size: .68rem; font-weight: 600;
+        padding: 2px 7px; border-radius: 20px; white-space: nowrap;
     }
-    .phone-input-group .form-select { border-radius: 10px 0 0 10px; max-width: 130px; }
+    .phone-input-group .form-select { border-radius: 10px 0 0 10px; flex: 0 0 140px; }
     .phone-input-group .form-control { border-radius: 0 10px 10px 0; border-left: none; }
     .phone-input-group .form-control:focus { z-index: 3; }
-    .pin-input { letter-spacing: .3em; font-size: 1.2rem; font-weight: 700;
-                 text-align: center; max-width: 120px; }
-    .section-label { font-size: .7rem; font-weight: 700; text-transform: uppercase;
-                     letter-spacing: .06em; color: #9ca3af; margin-bottom: .5rem; }
+    .pin-input {
+        letter-spacing: .3em; font-size: 1.2rem; font-weight: 700;
+        text-align: center; width: 110px; flex-shrink: 0;
+    }
+    .section-label {
+        font-size: .68rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .07em; color: #9ca3af; margin-bottom: .6rem;
+    }
     #pwa-prefs-status { min-height: 1rem; font-size: .8rem; }
+
+    /* Push card at bottom */
+    .push-card {
+        border-top: 1px solid #f1f5f9;
+        background: #fff;
+        border-radius: 0 !important;
+        margin: 0 -1rem -1rem;   /* bleed to panel edges */
+        padding: 12px 16px;
+    }
+    .push-card .form-check-input { width: 2.5em; height: 1.25em; }
 </style>
 
 <div class="pwa-user-panel p-3">
 
-    {{-- Header --}}
+    {{-- ── Header ──────────────────────────────────────────────────────── --}}
     <div class="d-flex justify-content-between align-items-start mb-3">
         <div>
             <h6 class="fw-semibold mb-0">Your Settings</h6>
@@ -109,44 +115,64 @@ if (!empty($allowedCodes)) {
         <div class="card-body">
             <div class="section-label">Basic info</div>
 
+            {{-- Name (required — gates the Verify button) --}}
             <div class="mb-3">
-                <label class="form-label small text-muted" for="pref-name">Name</label>
-                <input type="text" id="pref-name" class="form-control form-control-sm" autocomplete="name">
+                <label class="form-label small text-muted" for="pref-name">
+                    Name <span class="text-danger">*</span>
+                </label>
+                <input type="text" id="pref-name"
+                       class="form-control form-control-sm"
+                       autocomplete="name"
+                       placeholder="Your name"
+                       required>
+                <div id="name-error" class="text-danger small mt-1 d-none">
+                    Please enter your name before verifying your email.
+                </div>
             </div>
 
-            {{-- Email with verification flow --}}
+            {{-- Email + verify --}}
             <div class="mb-2">
-                <label class="form-label small text-muted d-flex justify-content-between" for="pref-email">
+                <label class="form-label small text-muted d-flex justify-content-between align-items-center"
+                       for="pref-email">
                     <span>Email</span>
-                    <span id="email-verified-badge" class="d-none verified-badge bg-success-subtle text-success">
+                    <span id="email-verified-badge"
+                          class="d-none verified-badge bg-success-subtle text-success">
                         <i class="bi bi-check-circle-fill me-1"></i>Verified
                     </span>
-                    <span id="email-unverified-badge" class="d-none verified-badge bg-warning-subtle text-warning">
+                    <span id="email-unverified-badge"
+                          class="d-none verified-badge bg-warning-subtle text-warning">
                         Unverified
                     </span>
                 </label>
                 <div class="input-group input-group-sm">
-                    <input type="email" id="pref-email" class="form-control" autocomplete="email">
-                    <button class="btn btn-outline-secondary btn-sm" id="send-pin-btn" type="button">
+                    <input type="email" id="pref-email"
+                           class="form-control" autocomplete="email"
+                           placeholder="you@example.com">
+                    <button class="btn btn-outline-secondary btn-sm"
+                            id="send-pin-btn" type="button" disabled>
                         Verify
                     </button>
                 </div>
                 <div class="form-text d-none" id="pin-sent-hint">
-                    Check your inbox — a 4-digit code has been sent.
+                    A 4-digit code has been sent — check your inbox.
                 </div>
             </div>
 
-            {{-- PIN entry (hidden until code is sent) --}}
+            {{-- PIN entry (hidden until code sent) --}}
             <div id="pin-entry-row" class="d-none mb-3">
-                <label class="form-label small text-muted" for="pin-input">Enter the 4-digit code</label>
+                <label class="form-label small text-muted" for="pin-input">
+                    Enter the 4-digit code
+                </label>
                 <div class="d-flex gap-2 align-items-center">
-                    <input type="text" id="pin-input" inputmode="numeric" pattern="[0-9]{4}"
-                           maxlength="4" class="form-control form-control-sm pin-input"
+                    <input type="text" id="pin-input"
+                           inputmode="numeric" pattern="[0-9]{4}" maxlength="4"
+                           class="form-control form-control-sm pin-input"
                            placeholder="0000" autocomplete="one-time-code">
                     <button class="btn btn-primary btn-sm" id="verify-pin-btn" type="button">
                         Confirm
                     </button>
-                    <button class="btn btn-link btn-sm text-muted p-0" id="resend-pin-btn" type="button">
+                    <button class="btn btn-link btn-sm text-muted p-0"
+                            id="resend-pin-btn" type="button">
                         Resend
                     </button>
                 </div>
@@ -160,30 +186,29 @@ if (!empty($allowedCodes)) {
         </div>
     </div>
 
-    {{-- ── Phone number (gated: email must be verified) ─────────────────── --}}
-    <div class="card shadow-sm border-0 mb-3" id="phone-card">
+    {{-- ── Mobile number (gated: email must be verified) ───────────────── --}}
+    <div class="card shadow-sm border-0 mb-3">
         <div class="card-body">
             <div class="section-label d-flex justify-content-between align-items-center">
                 <span>Mobile number</span>
-                <span id="phone-verified-badge" class="d-none verified-badge bg-success-subtle text-success">
+                <span id="phone-verified-badge"
+                      class="d-none verified-badge bg-success-subtle text-success">
                     <i class="bi bi-check-circle-fill me-1"></i>Verified
                 </span>
             </div>
 
-            {{-- Locked state --}}
-            <div id="phone-locked" class="text-muted small py-2">
+            <div id="phone-locked" class="text-muted small py-1">
                 <i class="bi bi-lock me-1"></i>
-                Verify your email address first to unlock this field.
+                Verify your email address first.
             </div>
 
-            {{-- Unlocked state --}}
             <div id="phone-unlocked" class="d-none">
                 <label class="form-label small text-muted" for="pref-phone">Number</label>
                 <div class="input-group input-group-sm phone-input-group mb-2">
                     <select id="phone-country" class="form-select form-select-sm">
                         @foreach($countries as [$iso, $dial, $name])
                             <option value="{{ $dial }}" data-iso="{{ $iso }}"
-                                {{ $iso === $defaultCountry ? 'selected' : '' }}>
+                                    {{ $iso === $defaultCountry ? 'selected' : '' }}>
                                 {{ $iso }} {{ $dial }} — {{ $name }}
                             </option>
                         @endforeach
@@ -191,7 +216,8 @@ if (!empty($allowedCodes)) {
                     <input type="tel" id="pref-phone" class="form-control"
                            placeholder="820000000" autocomplete="tel-national">
                 </div>
-                <button id="save-phone-btn" class="btn btn-outline-primary btn-sm w-100">
+                <button id="save-phone-btn"
+                        class="btn btn-outline-primary btn-sm w-100">
                     Save number
                 </button>
                 <div id="phone-error" class="text-danger small mt-1 d-none"></div>
@@ -207,7 +233,8 @@ if (!empty($allowedCodes)) {
             <div class="section-label">Additional settings</div>
             @foreach($customFields as $field)
                 <div class="mb-3">
-                    <label class="form-label small text-muted" for="pref-custom-{{ $field['key'] }}">
+                    <label class="form-label small text-muted"
+                           for="pref-custom-{{ $field['key'] }}">
                         {{ $field['label'] }}
                     </label>
                     @if($field['type'] === 'select')
@@ -238,31 +265,34 @@ if (!empty($allowedCodes)) {
     </div>
     @endif
 
-    {{-- ── Push notifications card ──────────────────────────────────────── --}}
+    @stack('pwa-user-fields')
+    @stack('pwa-user-settings')
+
+    {{-- ── Push notifications — pinned to bottom ───────────────────────── --}}
     @if(config('pwa.push.enabled', true))
-    <div class="card shadow-sm border-0 mb-3" id="push-card">
-        <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+    <div class="mt-auto push-card">
+        <div class="d-flex justify-content-between align-items-center">
             <div>
-                <div class="small fw-medium">Push notifications</div>
-                <div class="text-muted" style="font-size:.75rem" id="push-status-label">Checking…</div>
+                <div class="small fw-semibold">
+                    <i class="bi bi-bell me-1 text-muted"></i>Push notifications
+                </div>
+                <div class="text-muted" style="font-size:.73rem" id="push-status-label">
+                    Checking…
+                </div>
             </div>
-            <div class="form-check form-switch mb-0 ms-2">
+            <div class="form-check form-switch mb-0 ms-3">
                 <input class="form-check-input" type="checkbox" role="switch"
                        id="pushToggle" disabled>
             </div>
         </div>
-        {{-- Shown only when push is locked because phone isn't verified --}}
-        <div id="push-phone-required" class="d-none px-3 pb-2">
+        <div id="push-phone-required" class="d-none mt-1">
             <small class="text-warning">
                 <i class="bi bi-exclamation-triangle me-1"></i>
-                A verified phone number is required to enable push notifications.
+                Requires a verified mobile number.
             </small>
         </div>
     </div>
     @endif
-
-    @stack('pwa-user-fields')
-    @stack('pwa-user-settings')
 
 </div>
 
@@ -283,46 +313,58 @@ if (!empty($allowedCodes)) {
         return id;
     }
 
-    // ── Simple fetch wrapper ───────────────────────────────────────────────
+    // ── Fetch helper ───────────────────────────────────────────────────────
     async function post(url, body) {
         const res = await fetch(url, {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
-            body:    JSON.stringify(body),
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': CSRF,
+                'Accept':       'application/json',
+            },
+            body: JSON.stringify(body),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || 'HTTP ' + res.status);
         return data;
     }
 
-    // ── State ──────────────────────────────────────────────────────────────
-    // Loaded from server on open; drives badge + lock visibility
+    // ── Local state ────────────────────────────────────────────────────────
     let state = {
         emailVerified: false,
         phoneVerified: false,
-        phone:         '',
+        verifiedEmail: '',   // the email address that was verified
     };
 
-    // ── UI helpers ─────────────────────────────────────────────────────────
-    function show(id)  { document.getElementById(id)?.classList.remove('d-none'); }
-    function hide(id)  { document.getElementById(id)?.classList.add('d-none'); }
-    function val(id)   { return document.getElementById(id)?.value?.trim() ?? ''; }
-    function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v ?? ''; }
+    // ── DOM helpers ────────────────────────────────────────────────────────
+    const $  = id => document.getElementById(id);
+    const show = id => $(id)?.classList.remove('d-none');
+    const hide = id => $(id)?.classList.add('d-none');
+    const val  = id => $(id)?.value?.trim() ?? '';
+    const setV = (id, v) => { const el = $(id); if (el) el.value = v ?? ''; };
 
+    // ── Sync UI to state ───────────────────────────────────────────────────
     function applyState() {
+        const emailVal = val('pref-email');
+
         // Email badges
-        if (state.emailVerified) {
+        if (state.emailVerified && emailVal === state.verifiedEmail) {
             show('email-verified-badge');
             hide('email-unverified-badge');
-        } else if (val('pref-email')) {
+        } else if (emailVal) {
             hide('email-verified-badge');
             show('email-unverified-badge');
+            // If email has changed since verification, clear local verified state
+            if (state.emailVerified && emailVal !== state.verifiedEmail) {
+                state.emailVerified = false;
+                state.phoneVerified = false;
+            }
         } else {
             hide('email-verified-badge');
             hide('email-unverified-badge');
         }
 
-        // Phone section
+        // Phone section gate
         if (state.emailVerified) {
             hide('phone-locked');
             show('phone-unlocked');
@@ -332,34 +374,47 @@ if (!empty($allowedCodes)) {
         }
 
         // Phone verified badge
-        if (state.phoneVerified) {
-            show('phone-verified-badge');
-        } else {
-            hide('phone-verified-badge');
-        }
+        state.phoneVerified ? show('phone-verified-badge') : hide('phone-verified-badge');
 
-        // Push toggle gating
+        // Verify button — requires name to be filled
+        updateVerifyButton();
+
+        // Push toggle
         refreshPushToggle();
+    }
+
+    // ── Verify button gating (requires name) ──────────────────────────────
+    function updateVerifyButton() {
+        const btn          = $('send-pin-btn');
+        const hasName      = val('pref-name').length > 0;
+        const hasEmail     = val('pref-email').length > 0;
+        const alreadyVerif = state.emailVerified && val('pref-email') === state.verifiedEmail;
+
+        if (btn) {
+            btn.disabled = !hasName || !hasEmail || alreadyVerif;
+        }
     }
 
     // ── Push toggle ────────────────────────────────────────────────────────
     async function refreshPushToggle() {
-        const toggle    = document.getElementById('pushToggle');
-        const statusLbl = document.getElementById('push-status-label');
-        const lockedMsg = document.getElementById('push-phone-required');
+        const toggle    = $('pushToggle');
+        const statusLbl = $('push-status-label');
         if (!toggle) return;
 
         if (!state.phoneVerified) {
             toggle.checked  = false;
             toggle.disabled = true;
-            if (statusLbl) statusLbl.textContent = 'Requires verified phone number';
+            if (statusLbl) statusLbl.textContent = 'Requires verified mobile number';
             show('push-phone-required');
             return;
         }
 
         hide('push-phone-required');
 
-        if (!window.pushNotifications) return;
+        if (!window.pushNotifications) {
+            if (statusLbl) statusLbl.textContent = 'Not available';
+            return;
+        }
 
         const status = await window.pushNotifications.checkStatus();
 
@@ -377,36 +432,35 @@ if (!empty($allowedCodes)) {
     // ── Load preferences ───────────────────────────────────────────────────
     async function loadPreferences() {
         try {
-            const res = await fetch('/app/preferences?device_id=' + encodeURIComponent(deviceId()), {
-                headers: { 'Accept': 'application/json' }
-            });
+            const res = await fetch(
+                '/app/preferences?device_id=' + encodeURIComponent(deviceId()),
+                { headers: { 'Accept': 'application/json' } }
+            );
             if (!res.ok) return;
             const data = await res.json();
 
-            setVal('pref-name',  data.name);
-            setVal('pref-email', data.email);
+            setV('pref-name',  data.name);
+            setV('pref-email', data.email);
 
-            // Phone — populate the number part only (strip dial code if present)
+            // Populate phone field — strip dial code prefix if present
             if (data.phone) {
-                const countrySelect = document.getElementById('phone-country');
-                const selectedDial  = countrySelect?.value ?? '';
-                if (selectedDial && data.phone.startsWith(selectedDial)) {
-                    setVal('pref-phone', data.phone.slice(selectedDial.length));
-                } else {
-                    setVal('pref-phone', data.phone);
-                }
+                const dial = $('phone-country')?.value ?? '';
+                setV('pref-phone', dial && data.phone.startsWith(dial)
+                    ? data.phone.slice(dial.length)
+                    : data.phone
+                );
             }
 
+            // Custom fields
             const custom = data.custom_settings ?? {};
             document.querySelectorAll('[data-custom-key]').forEach(el => {
                 const v = custom[el.dataset.customKey];
-                if (el.type === 'checkbox') el.checked = !!v;
-                else el.value = v ?? '';
+                el.type === 'checkbox' ? (el.checked = !!v) : (el.value = v ?? '');
             });
 
             state.emailVerified = !!data.email_verified;
             state.phoneVerified = !!data.phone_verified;
-            state.phone         = data.phone ?? '';
+            state.verifiedEmail = data.email_verified ? (data.email ?? '') : '';
 
             applyState();
         } catch (e) {
@@ -414,11 +468,20 @@ if (!empty($allowedCodes)) {
         }
     }
 
-    // ── Save basic preferences (name + email + custom) ─────────────────────
+    // ── Save basic preferences ─────────────────────────────────────────────
     async function savePreferences() {
-        const btn      = document.getElementById('pwa-save-prefs');
-        const statusEl = document.getElementById('pwa-prefs-status');
-        btn.disabled   = true;
+        const btn      = $('pwa-save-prefs');
+        const statusEl = $('pwa-prefs-status');
+
+        // Name is required
+        if (!val('pref-name')) {
+            show('name-error');
+            $('pref-name')?.focus();
+            return;
+        }
+        hide('name-error');
+
+        btn.disabled = true;
         if (statusEl) statusEl.textContent = '';
 
         const custom = {};
@@ -426,20 +489,11 @@ if (!empty($allowedCodes)) {
             custom[el.dataset.customKey] = el.type === 'checkbox' ? el.checked : el.value;
         });
 
-        const emailNow = val('pref-email');
-
-        // If email changed, clear verified state locally
-        if (state.emailVerified && emailNow !== document.getElementById('pref-email')._verifiedEmail) {
-            state.emailVerified = false;
-            state.phoneVerified = false;
-            applyState();
-        }
-
         try {
             const data = await post('/app/preferences', {
                 device_id:       deviceId(),
                 name:            val('pref-name'),
-                email:           emailNow,
+                email:           val('pref-email'),
                 custom_settings: custom,
             });
             state.emailVerified = !!data.email_verified;
@@ -453,13 +507,21 @@ if (!empty($allowedCodes)) {
         }
     }
 
-    // ── Email verification flow ────────────────────────────────────────────
+    // ── Send PIN ───────────────────────────────────────────────────────────
     async function sendPin() {
-        const btn   = document.getElementById('send-pin-btn');
-        const email = val('pref-email');
-        if (!email) { window.showToast?.('Enter an email address first', 'error'); return; }
+        // Guard: name required
+        if (!val('pref-name')) {
+            show('name-error');
+            $('pref-name')?.focus();
+            return;
+        }
+        hide('name-error');
 
-        btn.disabled  = true;
+        const btn   = $('send-pin-btn');
+        const email = val('pref-email');
+        if (!email) return;
+
+        btn.disabled    = true;
         btn.textContent = '…';
 
         try {
@@ -467,7 +529,7 @@ if (!empty($allowedCodes)) {
             show('pin-entry-row');
             show('pin-sent-hint');
             hide('pin-error');
-            document.getElementById('pin-input')?.focus();
+            $('pin-input')?.focus();
             window.showToast?.('Code sent — check your inbox');
         } catch (e) {
             window.showToast?.(e.message || 'Could not send code', 'error');
@@ -477,12 +539,13 @@ if (!empty($allowedCodes)) {
         }
     }
 
+    // ── Verify PIN ─────────────────────────────────────────────────────────
     async function verifyPin() {
-        const btn = document.getElementById('verify-pin-btn');
-        const pin = val('pin-input');
-        const errEl = document.getElementById('pin-error');
+        const btn   = $('verify-pin-btn');
+        const pin   = val('pin-input');
+        const errEl = $('pin-error');
 
-        if (pin.length !== 4) {
+        if (pin.replace(/\D/g,'').length !== 4) {
             errEl.textContent = 'Enter the 4-digit code.';
             show('pin-error');
             return;
@@ -494,30 +557,28 @@ if (!empty($allowedCodes)) {
         try {
             await post('/app/verify/confirm-pin', { device_id: deviceId(), pin });
 
-            // Mark verified locally
             state.emailVerified = true;
-            document.getElementById('pref-email')._verifiedEmail = val('pref-email');
+            state.verifiedEmail = val('pref-email');
 
             hide('pin-entry-row');
             hide('pin-sent-hint');
-            setVal('pin-input', '');
+            setV('pin-input', '');
             applyState();
             window.showToast?.('Email verified ✓');
         } catch (e) {
             errEl.textContent = e.message || 'Incorrect code.';
             show('pin-error');
-            document.getElementById('pin-input')?.select();
+            $('pin-input')?.select();
         } finally {
             btn.disabled = false;
         }
     }
 
-    // ── Phone save ─────────────────────────────────────────────────────────
+    // ── Save phone ─────────────────────────────────────────────────────────
     async function savePhone() {
-        const btn     = document.getElementById('save-phone-btn');
-        const errEl   = document.getElementById('phone-error');
-        const dialSel = document.getElementById('phone-country');
-        const local   = val('pref-phone').replace(/\D/g, '');   // digits only
+        const btn    = $('save-phone-btn');
+        const errEl  = $('phone-error');
+        const local  = val('pref-phone').replace(/\D/g, '');
 
         hide('phone-error');
 
@@ -527,17 +588,16 @@ if (!empty($allowedCodes)) {
             return;
         }
 
-        const dialCode = dialSel?.value ?? '+27';
-        const e164     = dialCode + local;  // e.g. +27794999139
+        const dialCode = $('phone-country')?.value ?? '+27';
+        const e164     = dialCode + local;
 
         btn.disabled = true;
 
         try {
             await post('/app/verify/phone', { device_id: deviceId(), phone: e164 });
             state.phoneVerified = true;
-            state.phone         = e164;
             applyState();
-            window.showToast?.('Phone number saved');
+            window.showToast?.('Mobile number saved');
         } catch (e) {
             errEl.textContent = e.message || 'Could not save number.';
             show('phone-error');
@@ -546,10 +606,10 @@ if (!empty($allowedCodes)) {
         }
     }
 
-    // ── Push toggle change handler ─────────────────────────────────────────
+    // ── Push toggle change ─────────────────────────────────────────────────
     function bindPushToggle() {
-        const toggle    = document.getElementById('pushToggle');
-        const statusLbl = document.getElementById('push-status-label');
+        const toggle    = $('pushToggle');
+        const statusLbl = $('push-status-label');
         if (!toggle) return;
 
         toggle.addEventListener('change', async () => {
@@ -558,9 +618,8 @@ if (!empty($allowedCodes)) {
                 if (toggle.checked) {
                     await window.pushNotifications.subscribe();
                     if (statusLbl) statusLbl.textContent = 'Enabled';
+                    $('enable-push')?.classList.add('d-none');
                     window.showToast?.('Push notifications enabled');
-                    // Remove top-bar bell once subscribed from here too
-                    document.getElementById('enable-push')?.classList.add('d-none');
                 } else {
                     await window.pushNotifications.unsubscribe();
                     if (statusLbl) statusLbl.textContent = 'Disabled';
@@ -580,19 +639,27 @@ if (!empty($allowedCodes)) {
         loadPreferences();
         bindPushToggle();
 
-        document.getElementById('pwa-save-prefs')?.addEventListener('click', savePreferences);
-        document.getElementById('send-pin-btn')?.addEventListener('click', sendPin);
-        document.getElementById('resend-pin-btn')?.addEventListener('click', sendPin);
-        document.getElementById('verify-pin-btn')?.addEventListener('click', verifyPin);
-        document.getElementById('save-phone-btn')?.addEventListener('click', savePhone);
+        $('pwa-save-prefs')  ?.addEventListener('click',  savePreferences);
+        $('send-pin-btn')    ?.addEventListener('click',  sendPin);
+        $('resend-pin-btn')  ?.addEventListener('click',  sendPin);
+        $('verify-pin-btn')  ?.addEventListener('click',  verifyPin);
+        $('save-phone-btn')  ?.addEventListener('click',  savePhone);
 
-        // Auto-submit PIN when 4 digits are typed
-        document.getElementById('pin-input')?.addEventListener('input', function () {
-            if (this.value.replace(/\D/g,'').length === 4) verifyPin();
+        // Re-evaluate Verify button whenever name or email changes
+        $('pref-name') ?.addEventListener('input', updateVerifyButton);
+        $('pref-email')?.addEventListener('input', updateVerifyButton);
+
+        // Clear name-error once they start typing
+        $('pref-name')?.addEventListener('input', () => hide('name-error'));
+
+        // Auto-submit PIN on 4th digit
+        $('pin-input')?.addEventListener('input', function () {
+            this.value = this.value.replace(/\D/g, '').slice(0, 4);
+            if (this.value.length === 4) verifyPin();
         });
 
-        // Enforce digits-only in phone field
-        document.getElementById('pref-phone')?.addEventListener('input', function () {
+        // Digits only in phone local field
+        $('pref-phone')?.addEventListener('input', function () {
             this.value = this.value.replace(/\D/g, '');
         });
     });

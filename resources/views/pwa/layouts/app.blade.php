@@ -64,7 +64,8 @@
         .slide-menu {
             position: fixed;
             top: 0;
-            width: 280px;
+            width: 100%;
+            max-width: 480px;   /* caps width on tablets/desktop */
             height: 100%;
             background: #ffffff;
             box-shadow: 0 0 20px rgba(0,0,0,.15);
