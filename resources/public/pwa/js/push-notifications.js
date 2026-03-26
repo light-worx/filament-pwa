@@ -1,190 +1,232 @@
-// push-notifications.js - Complete version for PWA
-
-console.log('📱 Push notifications script loading...');
-
-// Get VAPID key from meta tag
-const VAPID_PUBLIC_KEY = document.querySelector('meta[name="vapid-key"]')?.content || '';
-
-if (!VAPID_PUBLIC_KEY) {
-    console.error('❌ VAPID public key not found in meta tag');
-    console.log('Available meta tags:', Array.from(document.querySelectorAll('meta')).map(m => m.name));
-} else {
-    console.log('✅ VAPID key loaded:', VAPID_PUBLIC_KEY.substring(0, 20) + '...');
-}
-
 /**
- * Convert VAPID key from base64 to Uint8Array
+ * push-notifications.js
+ * Single source of truth for push + PWA install logic.
+ * Exposes window.pushNotifications for use by other components.
  */
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding)
-        .replace(/\-/g, '+')
-        .replace(/_/g, '/');
 
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
+(function () {
+    'use strict';
 
-    for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
+    const VAPID_KEY   = document.querySelector('meta[name="vapid-key"]')?.content ?? '';
+    const CSRF_TOKEN  = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+    const APP_VERSION = document.querySelector('meta[name="app-version"]')?.content ?? '1.0.0';
+
+    if (!VAPID_KEY) {
+        console.warn('PWA: vapid-key meta tag missing. Push notifications will not work.');
     }
-    return outputArray;
-}
 
-/**
- * Request notification permission and subscribe to push notifications
- */
-async function subscribeToPushNotifications() {
-    try {
-        console.log('🔔 Starting push notification subscription...');
-        
-        // Check if service workers are supported
-        if (!('serviceWorker' in navigator)) {
-            console.error('❌ Service Workers not supported');
-            throw new Error('Service Workers not supported in this browser');
-        }
+    // ── Utilities ────────────────────────────────────────────────────────────
 
-        // Check if Push API is supported
-        if (!('PushManager' in window)) {
-            console.error('❌ Push notifications not supported');
-            throw new Error('Push notifications not supported in this browser');
-        }
-
-        if (!VAPID_PUBLIC_KEY) {
-            console.error('❌ VAPID key missing');
-            throw new Error('VAPID public key not configured');
-        }
-
-        console.log('📱 Requesting notification permission...');
-        // Request notification permission
-        const permission = await Notification.requestPermission();
-        console.log('Permission result:', permission);
-        
-        if (permission !== 'granted') {
-            console.log('❌ Notification permission denied');
-            throw new Error('Notification permission denied');
-        }
-
-        console.log('⏳ Waiting for service worker...');
-        // Wait for service worker to be ready
-        const registration = await navigator.serviceWorker.ready;
-        console.log('✅ Service worker ready:', registration);
-
-        // Check if already subscribed
-        let subscription = await registration.pushManager.getSubscription();
-
-        if (!subscription) {
-            console.log('📝 Creating new subscription...');
-            // Subscribe to push notifications
-            subscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-            });
-
-            console.log('✅ Push notification subscription created');
-        } else {
-            console.log('✅ Already subscribed to push notifications');
-        }
-
-        // Send subscription to your Laravel backend
-        await saveSubscription(subscription);
-
-        return subscription;
-
-    } catch (error) {
-        console.error('❌ Error subscribing to push notifications:', error);
-        throw error;
+    function urlBase64ToUint8Array(base64) {
+        const padding = '='.repeat((4 - base64.length % 4) % 4);
+        const b64     = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const raw     = atob(b64);
+        return Uint8Array.from(raw, c => c.charCodeAt(0));
     }
-}
 
-/**
- * Save the subscription to your Laravel backend
- */
-async function saveSubscription(subscription) {
-    try {
-        console.log('💾 Saving subscription to server...');
-        const response = await fetch('/push/subscribe', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify(subscription.toJSON())
+    function isSupported() {
+        return 'serviceWorker' in navigator && 'PushManager' in window;
+    }
+
+    async function getRegistration() {
+        if (!('serviceWorker' in navigator)) return null;
+        try { return await navigator.serviceWorker.ready; } catch { return null; }
+    }
+
+    async function getCurrentSubscription() {
+        const reg = await getRegistration();
+        return reg ? reg.pushManager.getSubscription() : null;
+    }
+
+    // ── Server sync ──────────────────────────────────────────────────────────
+
+    async function saveSubscriptionToServer(subscription) {
+        const json = subscription.toJSON();
+        const res  = await fetch('/app/subscribe', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_TOKEN, 'Accept': 'application/json' },
+            body:    JSON.stringify(json),
         });
-
-        if (!response.ok) {
-            throw new Error('Failed to save subscription: ' + response.status);
-        }
-
-        const data = await response.json();
-        console.log('✅ Subscription saved successfully:', data);
-
-    } catch (error) {
-        console.error('❌ Error saving subscription:', error);
-        throw error;
+        if (!res.ok) throw new Error('Server error: ' + res.status);
+        return res.json();
     }
-}
 
-/**
- * Unsubscribe from push notifications
- */
-async function unsubscribeFromPushNotifications() {
-    try {
-        console.log('🔕 Unsubscribing from push notifications...');
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
+    async function removeSubscriptionFromServer(endpoint) {
+        await fetch('/app/unsubscribe', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_TOKEN, 'Accept': 'application/json' },
+            body:    JSON.stringify({ endpoint }),
+        });
+    }
 
-        if (subscription) {
-            await subscription.unsubscribe();
-            
-            // Remove subscription from backend
-            await fetch('/push/unsubscribe', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    endpoint: subscription.endpoint
-                })
+    /**
+     * Ask the server whether it holds a record for this endpoint.
+     * Fixes the "appears subscribed locally but no DB record" bug:
+     * the browser retains a PushSubscription across page loads even if
+     * the server DB was wiped or the row was deleted.
+     */
+    async function isSubscribedOnServer(endpoint) {
+        try {
+            const res = await fetch('/app/push/status', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_TOKEN, 'Accept': 'application/json' },
+                body:    JSON.stringify({ endpoint }),
             });
-
-            console.log('✅ Unsubscribed from push notifications');
+            if (!res.ok) return false;
+            const data = await res.json();
+            return !!data.subscribed;
+        } catch {
+            return false;
         }
-    } catch (error) {
-        console.error('❌ Error unsubscribing:', error);
-        throw error;
     }
-}
 
-/**
- * Check current subscription status
- */
-async function checkSubscriptionStatus() {
-    try {
-        if (!('serviceWorker' in navigator)) {
-            return { subscribed: false, permission: 'default' };
+    // ── Public API ───────────────────────────────────────────────────────────
+
+    async function subscribe() {
+        if (!isSupported()) throw new Error('Push not supported');
+        if (!VAPID_KEY)     throw new Error('VAPID key not configured');
+
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') throw new Error('Permission denied');
+
+        const reg = await getRegistration();
+        if (!reg) throw new Error('Service worker not ready');
+
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+            sub = await reg.pushManager.subscribe({
+                userVisibleOnly:      true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_KEY),
+            });
         }
 
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
-        
+        await saveSubscriptionToServer(sub);
+        return sub;
+    }
+
+    async function unsubscribe() {
+        const sub = await getCurrentSubscription();
+        if (!sub) return;
+        const endpoint = sub.endpoint;
+        await sub.unsubscribe();
+        await removeSubscriptionFromServer(endpoint);
+    }
+
+    /**
+     * checkStatus now verifies BOTH the browser subscription AND the server record.
+     * If the browser thinks it's subscribed but the server has no record,
+     * we re-save the subscription so state is consistent.
+     */
+    async function checkStatus() {
+        if (!isSupported()) {
+            return { subscribed: false, permission: 'default', supported: false };
+        }
+
+        const sub = await getCurrentSubscription();
+
+        if (!sub) {
+            return { subscribed: false, permission: Notification.permission, supported: true };
+        }
+
+        // Browser has a subscription — confirm server also has it
+        const serverHasIt = await isSubscribedOnServer(sub.endpoint);
+
+        if (!serverHasIt) {
+            // Re-sync: save to server silently
+            try { await saveSubscriptionToServer(sub); } catch { /* non-fatal */ }
+        }
+
         return {
-            subscribed: !!subscription,
-            permission: Notification.permission
+            subscribed:  true,
+            permission:  Notification.permission,
+            supported:   true,
         };
-    } catch (error) {
-        console.error('❌ Error checking subscription:', error);
-        return { subscribed: false, permission: 'default' };
     }
-}
 
-// Export functions for use in your app
-window.pushNotifications = {
-    subscribe: subscribeToPushNotifications,
-    unsubscribe: unsubscribeFromPushNotifications,
-    checkStatus: checkSubscriptionStatus
-};
+    window.pushNotifications = { subscribe, unsubscribe, checkStatus };
 
-console.log('✅ window.pushNotifications initialized:', window.pushNotifications);
+    // ── Top-bar push button ──────────────────────────────────────────────────
+
+    async function initTopBarPushButton() {
+        const btn = document.getElementById('enable-push');
+        if (!btn) return;
+
+        const status = await checkStatus();
+
+        if (!status.supported || status.subscribed) {
+            btn.classList.add('d-none');
+            return;
+        }
+
+        if (status.permission === 'denied') {
+            btn.innerHTML = '<i class="bi bi-bell-slash"></i>';
+            btn.title     = 'Notifications blocked — reset in browser settings';
+            btn.classList.remove('d-none');
+            btn.classList.add('btn-outline-secondary');
+            btn.disabled  = true;
+            return;
+        }
+
+        btn.innerHTML = '<i class="bi bi-bell"></i>';
+        btn.title     = 'Enable push notifications';
+        btn.classList.remove('d-none');
+        btn.classList.add('btn-outline-primary');
+
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                await subscribe();
+                btn.classList.add('d-none');
+                window.showToast?.('Push notifications enabled');
+            } catch (e) {
+                console.warn('PWA: subscribe failed', e);
+                btn.disabled = false;
+                if (Notification.permission === 'denied') {
+                    btn.innerHTML = '<i class="bi bi-bell-slash"></i>';
+                    btn.title     = 'Notifications blocked — reset in browser settings';
+                    btn.classList.replace('btn-outline-primary', 'btn-outline-secondary');
+                    btn.disabled  = true;
+                }
+                window.showToast?.('Could not enable notifications', 'error');
+            }
+        });
+    }
+
+    // ── Install prompt ───────────────────────────────────────────────────────
+
+    let deferredInstallPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', e => {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+        document.getElementById('installBtn')?.classList.remove('d-none');
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        document.getElementById('installBtn')?.classList.add('d-none');
+        window.showToast?.('App installed successfully');
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('installBtn')?.addEventListener('click', async () => {
+            if (!deferredInstallPrompt) return;
+            deferredInstallPrompt.prompt();
+            const { outcome } = await deferredInstallPrompt.userChoice;
+            if (outcome === 'accepted') {
+                deferredInstallPrompt = null;
+                document.getElementById('installBtn')?.classList.add('d-none');
+            }
+        });
+    });
+
+    // ── Service worker registration ──────────────────────────────────────────
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker
+            .register('/service-worker.js?v=' + APP_VERSION)
+            .then(() => initTopBarPushButton())
+            .catch(err => console.error('PWA: SW registration failed', err));
+    }
+
+})();

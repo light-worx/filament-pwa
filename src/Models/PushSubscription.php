@@ -6,7 +6,17 @@ use Illuminate\Database\Eloquent\Model;
 
 class PushSubscription extends Model
 {
-    protected $guarded = ['id'];
+    protected $fillable = [
+        'endpoint',
+        'public_key',
+        'auth_token',
+        'content_encoding',
+        'user_preference_id',
+    ];
+
+    protected $casts = [];
+
+    // ── Relationships ──────────────────────────────────────────────────────────
 
     public function preference()
     {

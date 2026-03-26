@@ -1,22 +1,34 @@
 <header class="top-toolbar d-flex justify-content-between align-items-center px-3 py-2 shadow-sm fixed-top">
-    {{-- Left: Hamburger --}}
-    <button id="hamburgerBtn" class="btn btn-outline-secondary">
+
+    {{-- Left: hamburger --}}
+    <button id="hamburgerBtn" class="btn p-1" aria-label="Open navigation menu">
         <i class="bi bi-list fs-4"></i>
     </button>
 
-    {{-- Center: App Title --}}
-    <span class="fs-5 fw-bold">{{ $title ?? 'PWA App' }}</span>
+    {{-- Centre: app title --}}
+    <span class="fs-5 fw-bold">{{ $title ?? config('pwa.app_name') }}</span>
 
-    {{-- Right: User & Push --}}
+    {{-- Right: install + push + user --}}
     <div class="d-flex align-items-center gap-2">
-        {{-- Push notification button --}}
-        <button id="enable-push" class="btn btn-outline-primary btn-sm d-none">
-            <i class="bi bi-bell-fill"></i>
-        </button>
 
-        {{-- User menu button --}}
-        <button id="userMenuBtn" class="btn btn-outline-secondary">
+        {{-- Install-to-homescreen button (hidden until beforeinstallprompt fires) --}}
+        @if(config('pwa.install_prompt', true))
+        <button id="installBtn" class="btn btn-outline-secondary btn-sm d-none" aria-label="Install app">
+            <i class="bi bi-download"></i>
+        </button>
+        @endif
+
+        {{-- Push notification toggle (hidden until status known) --}}
+        @if(config('pwa.push.enabled', true))
+        <button id="enable-push" class="btn btn-sm d-none" aria-label="Enable push notifications">
+            <i class="bi bi-bell"></i>
+        </button>
+        @endif
+
+        {{-- User settings panel --}}
+        <button id="userMenuBtn" class="btn p-1" aria-label="Open user settings">
             <i class="bi bi-person-circle fs-4"></i>
         </button>
+
     </div>
 </header>

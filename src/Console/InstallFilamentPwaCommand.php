@@ -3,66 +3,59 @@
 namespace Lightworx\FilamentPwa\Console;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Schema;
 
 class InstallFilamentPwaCommand extends Command
 {
-    protected $signature = 'filament-pwa:install {--force : Overwrite existing files}';
-
-    protected $description = 'Install the Filament PWA plugin';
+    protected $signature   = 'filament-pwa:install';
+    protected $description = 'Install the Filament PWA package';
 
     public function handle(): int
     {
-        $this->info('Installing Filament PWA plugin...');
+        $this->info('Installing Filament PWA...');
 
-        $force = $this->option('force') ? ['--force' => true] : [];
-
-        /*
-         |---------------------------------------------------------
-         | Publish WebPush (notification-channels/webpush)
-         |---------------------------------------------------------
-         */
-
-        if (env('VAPID_PUBLIC_KEY') && env('VAPID_PRIVATE_KEY')){
-            $this->newLine();
-            $this->info('VAPID keys already set.');
-        } else {
-            $this->info('Publishing WebPush config and migrations...');
-
-            $this->call('vendor:publish', array_merge([
-                '--provider' => 'NotificationChannels\WebPush\WebPushServiceProvider',
-            ], $force));
-            $this->newLine();
-            $this->call('webpush:vapid');
-            $this->newLine();
-            $this->call('migrate');
+        // ── Prerequisite checks ───────────────────────────────────────────────
+        if (!class_exists(\NotificationChannels\WebPush\WebPushServiceProvider::class)) {
+            $this->error('laravel-webpush is not installed.');
+            $this->line('  Run: composer require laravel-notification-channels/webpush');
+            return self::FAILURE;
         }
-        $this->newLine();
 
-        /*
-         |---------------------------------------------------------
-         | Publish Filament PWA package files
-         |---------------------------------------------------------
-         */
-        $this->info('Publishing Filament PWA assets...');
+        if (!class_exists(\Livewire\LivewireServiceProvider::class)) {
+            $this->warn('Livewire does not appear to be installed.');
+            $this->line('  Run: composer require livewire/livewire');
+            // Non-fatal; some layouts may not use Livewire.
+        }
 
-        $this->call('vendor:publish', array_merge([
-            '--tag' => 'filament-pwa-config',
-        ], $force));
+        if (!Schema::hasTable('push_subscriptions')) {
+            $this->error('The push_subscriptions table does not exist.');
+            $this->line('  Please run the laravel-webpush migrations first:');
+            $this->line('  php artisan migrate');
+            return self::FAILURE;
+        }
 
-        $this->call('vendor:publish', array_merge([
-            '--tag' => 'filament-pwa-assets',
-        ], $force));
+        // ── Publish assets ────────────────────────────────────────────────────
+        $this->callSilently('vendor:publish', [
+            '--tag'   => 'filament-pwa-assets',
+            '--force' => true,
+        ]);
+        $this->info('  ✓ Assets published');
 
-        $this->call('vendor:publish', array_merge([
-            '--tag' => 'filament-pwa-views',
-        ], $force));
+        // ── Publish config (skip if already exists) ───────────────────────────
+        if (!file_exists(config_path('pwa.php'))) {
+            $this->callSilently('vendor:publish', ['--tag' => 'filament-pwa-config']);
+            $this->info('  ✓ Config published to config/pwa.php');
+        } else {
+            $this->line('  - config/pwa.php already exists, skipping');
+        }
 
-        $this->call('vendor:publish', array_merge([
-            '--tag' => 'filament-pwa-public',
-        ], $force));
+        // ── Run package migrations ────────────────────────────────────────────
+        $this->callSilently('migrate');
+        $this->info('  ✓ Migrations run');
 
         $this->newLine();
         $this->info('Filament PWA installed successfully.');
+        $this->line('  Next: review config/pwa.php to set your theme and nav items.');
 
         return self::SUCCESS;
     }

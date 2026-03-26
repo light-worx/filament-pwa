@@ -1,14 +1,32 @@
-<div class="p-3 border-bottom">
-    <div class="fw-semibold">Navigation</div>
-    <small class="text-muted">Quick access</small>
+<div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+    <div>
+        <div class="fw-semibold">{{ config('pwa.app_name') }}</div>
+        <small class="text-muted">Navigation</small>
+    </div>
+    <button class="btn btn-sm text-muted" onclick="document.getElementById('menuOverlay').click()" aria-label="Close menu">
+        <i class="bi bi-x-lg"></i>
+    </button>
 </div>
 
 <div class="list-group list-group-flush">
-    <a href="{{ route('app.home') }}" class="list-group-item list-group-item-action">
-        <i class="bi bi-house me-2"></i> Home
-    </a>
 
-    <a href="#" class="list-group-item list-group-item-action">
-        <i class="bi bi-diagram-3 me-2"></i> Circuits
-    </a>
+    {{-- Config-driven items --}}
+    @foreach(config('pwa.nav_items', []) as $item)
+        @php
+            $href = isset($item['route'])
+                ? (Route::has($item['route']) ? route($item['route']) : '#')
+                : ($item['url'] ?? '#');
+
+            $active = request()->url() === $href ? 'active' : '';
+        @endphp
+        <a href="{{ $href }}"
+           class="list-group-item list-group-item-action {{ $active }}">
+            <i class="bi {{ $item['icon'] ?? 'bi-circle' }} me-2"></i>
+            {{ $item['label'] ?? '' }}
+        </a>
+    @endforeach
+
+    {{-- Developer-injected extra items --}}
+    @stack('pwa-nav-items')
+
 </div>
