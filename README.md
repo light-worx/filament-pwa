@@ -1,6 +1,6 @@
 # Filament PWA
 
-Progressive Web App support for Filament 4.
+Progressive Web App support for Filament 5.
 
 ## Installation
 

@@ -44,9 +44,9 @@ return [
     |--------------------------------------------------------------------------
     */
     'bottom_items' => [
-        ['icon' => 'bi-house',  'route' => 'app.home', 'label' => 'Home'],
-        ['icon' => 'bi-search', 'url'   => '#',        'label' => 'Search'],
-        ['icon' => 'bi-gear',   'url'   => '#',        'label' => 'Settings'],
+        ['icon' => 'bi-house',  'route' => 'app.home', 'label' => ''],
+        ['icon' => 'bi-search', 'url'   => '#',        'label' => ''],
+        ['icon' => 'bi-gear',   'url'   => '#',        'label' => ''],
     ],
 
     /*
