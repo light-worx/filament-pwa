@@ -8,7 +8,6 @@ return [
     |--------------------------------------------------------------------------
     */
     'app_name'    => env('PWA_APP_NAME', env('APP_NAME', 'My App')),
-    'app_route'   => '/app',
     'app_short'   => env('PWA_APP_SHORT', 'App'),
     'description' => env('PWA_DESCRIPTION', 'A progressive web application'),
 
@@ -44,21 +43,55 @@ return [
     |--------------------------------------------------------------------------
     */
     'bottom_items' => [
-        ['icon' => 'bi-house',  'route' => 'app.home', 'label' => ''],
-        ['icon' => 'bi-search', 'url'   => '#',        'label' => ''],
-        ['icon' => 'bi-gear',   'url'   => '#',        'label' => ''],
+        ['icon' => 'bi-house',  'route' => 'app.home', 'label' => 'Home'],
+        ['icon' => 'bi-search', 'url'   => '#',        'label' => 'Search'],
+        ['icon' => 'bi-gear',   'url'   => '#',        'label' => 'Settings'],
     ],
 
     /*
     |--------------------------------------------------------------------------
     | User settings — extra fields rendered in the right slide-over panel
+    |
+    | Field types: text | email | tel | number | select | toggle
+    |
+    | For 'select', the 'options' key can be:
+    |
+    |   A static array:
+    |     'options' => ['red' => 'Red', 'blue' => 'Blue']
+    |
+    |   'dynamic' — resolved at render time by a registered resolver.
+    |     Register in AppServiceProvider::boot():
+    |       PwaFieldOptions::register('region', fn() =>
+    |           Region::orderBy('name')->pluck('name', 'id')->toArray()
+    |       );
+    |
+    |   'dynamic' + 'searchable' => true — same resolver, but options are
+    |     fetched via AJAX when the panel opens (and re-fetched as the user
+    |     types). Good for large lists (100+ items). The resolver receives
+    |     the search string as its first argument:
+    |       PwaFieldOptions::register('product', fn(?string $search) =>
+    |           Product::when($search, fn($q) => $q->where('name','like',"%{$search}%"))
+    |                   ->limit(50)->pluck('name','id')->toArray()
+    |       );
     |--------------------------------------------------------------------------
     */
     'user_fields' => [
-        // ['type' => 'text',   'key' => 'department', 'label' => 'Department'],
+        // Static list
+        // ['type' => 'select', 'key' => 'colour', 'label' => 'Favourite colour',
+        //  'options' => ['red' => 'Red', 'green' => 'Green', 'blue' => 'Blue']],
+
+        // Dynamic (resolver called at render time, options embedded in HTML)
         // ['type' => 'select', 'key' => 'region', 'label' => 'Region',
-        //  'options' => ['za' => 'South Africa', 'uk' => 'United Kingdom']],
-        // ['type' => 'toggle', 'key' => 'dark_mode', 'label' => 'Dark mode'],
+        //  'options' => 'dynamic'],
+
+        // Dynamic + searchable (AJAX, supports large lists)
+        // ['type' => 'select', 'key' => 'product', 'label' => 'Product',
+        //  'options' => 'dynamic', 'searchable' => true,
+        //  'placeholder' => 'Search products…'],
+
+        // Other field types
+        // ['type' => 'text',   'key' => 'department', 'label' => 'Department'],
+        // ['type' => 'toggle', 'key' => 'dark_mode',  'label' => 'Dark mode'],
     ],
 
     /*

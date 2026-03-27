@@ -11,6 +11,7 @@
     <meta name="csrf-token"   content="{{ csrf_token() }}">
     <meta name="vapid-key"    content="{{ config('webpush.vapid.public_key') }}">
     <meta name="app-version"  content="{{ config('app.version', '1.0.0') }}">
+    <meta name="flags-path"   content="{{ asset('pwa/flags') }}">
 
     {{-- Styles --}}
     <link href="{{ asset('pwa/css/bootstrap.min.css') }}" rel="stylesheet">
@@ -19,7 +20,6 @@
 
     {{-- Emit theme as CSS custom properties so any override is a config change --}}
     <style>
-        a { text-decoration: none; }
         :root {
             --pwa-primary:       {{ config('pwa.theme.primary',      '#1f2937') }};
             --pwa-accent:        {{ config('pwa.theme.accent',       '#3b82f6') }};

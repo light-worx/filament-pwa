@@ -36,8 +36,7 @@ class InstallFilamentPwaCommand extends Command
 
         // ── Publish assets ────────────────────────────────────────────────────
         $this->callSilently('vendor:publish', [
-
-            '--provider="Lightworx\FilamentPwa\FilamentPwaServiceProvider"',
+            '--tag'   => 'filament-pwa-assets',
             '--force' => true,
         ]);
         $this->info('  ✓ Assets published');
@@ -54,9 +53,18 @@ class InstallFilamentPwaCommand extends Command
         $this->callSilently('migrate');
         $this->info('  ✓ Migrations run');
 
+        // ── Download flag images ──────────────────────────────────────────────
+        $this->info('Downloading country flag images…');
+        $flagResult = $this->call('pwa:download-flags');
+        if ($flagResult !== self::SUCCESS) {
+            $this->warn('  Some flags could not be downloaded. Run php artisan pwa:download-flags later.');
+        }
+
         $this->newLine();
         $this->info('Filament PWA installed successfully.');
-        $this->line('  Next: review config/pwa.php to set your theme and nav items.');
+        $this->line('  Next steps:');
+        $this->line('    • Review config/pwa.php to set your theme and nav items.');
+        $this->line('    • If flags are missing, run: php artisan pwa:download-flags');
 
         return self::SUCCESS;
     }

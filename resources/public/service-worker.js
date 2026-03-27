@@ -16,6 +16,10 @@ const PRECACHE = [
     '/pwa/js/push-notifications.js',
 ];
 
+// Flags are cached on-demand (cache-first) via the fetch handler below.
+// We don't precache all 80+ flags at install time — that would slow down
+// the SW install significantly. They're cached the first time they're seen.
+
 // ── Install ──────────────────────────────────────────────────────────────────
 
 self.addEventListener('install', event => {
@@ -42,6 +46,7 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
     const { request } = event;
+    const url = new URL(request.url);
 
     // Let HTML requests go straight to the network (SSR pages must be fresh)
     if (request.headers.get('accept')?.includes('text/html')) return;
@@ -49,6 +54,33 @@ self.addEventListener('fetch', event => {
     // Network-only for POST / non-GET
     if (request.method !== 'GET') return;
 
+    // Flag images: cache-first, then network, then serve a transparent 1px PNG
+    // so the onerror handler fires and the ISO text fallback shows instead of
+    // a broken-image icon when offline and not yet cached.
+    if (url.pathname.startsWith('/pwa/flags/')) {
+        event.respondWith(
+            caches.open(CACHE_NAME).then(async cache => {
+                const cached = await cache.match(request);
+                if (cached) return cached;
+
+                try {
+                    const response = await fetch(request);
+                    if (response.ok) cache.put(request, response.clone());
+                    return response;
+                } catch {
+                    // Offline and not cached — return a transparent 1×1 PNG
+                    // so the img onerror handler fires cleanly
+                    return new Response(
+                        atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='),
+                        { headers: { 'Content-Type': 'image/png' } }
+                    );
+                }
+            })
+        );
+        return;
+    }
+
+    // All other assets: cache-first
     event.respondWith(
         caches.match(request).then(cached => cached || fetch(request))
     );

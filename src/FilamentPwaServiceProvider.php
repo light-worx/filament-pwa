@@ -3,7 +3,9 @@
 namespace Lightworx\FilamentPwa;
 
 use Illuminate\Support\ServiceProvider;
+use Lightworx\FilamentPwa\Console\DownloadFlagsCommand;
 use Lightworx\FilamentPwa\Console\InstallFilamentPwaCommand;
+use Lightworx\FilamentPwa\FieldOptions\FieldOptionsRegistry;
 use Lightworx\FilamentPwa\Services\PushNotificationService;
 
 class FilamentPwaServiceProvider extends ServiceProvider
@@ -41,6 +43,7 @@ class FilamentPwaServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 InstallFilamentPwaCommand::class,
+                DownloadFlagsCommand::class,
             ]);
         }
     }
@@ -52,5 +55,10 @@ class FilamentPwaServiceProvider extends ServiceProvider
         // Register PushNotificationService as a singleton so the WebPush
         // client (and its HTTP connection pool) is reused within a request.
         $this->app->singleton(PushNotificationService::class);
+
+        // FieldOptionsRegistry is a singleton so resolvers registered in
+        // AppServiceProvider::boot() are available throughout the request.
+        $this->app->singleton(FieldOptionsRegistry::class);
+        $this->app->alias(FieldOptionsRegistry::class, 'pwa.field-options');
     }
 }

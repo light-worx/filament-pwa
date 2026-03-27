@@ -71,9 +71,18 @@ usort($countries, fn($a, $b) =>
         font-size: .68rem; font-weight: 600;
         padding: 2px 7px; border-radius: 20px; white-space: nowrap;
     }
-    .phone-input-group .form-select { border-radius: 10px 0 0 10px; flex: 0 0 140px; }
-    .phone-input-group .form-control { border-radius: 0 10px 10px 0; border-left: none; }
-    .phone-input-group .form-control:focus { z-index: 3; }
+    /* Country picker */
+    #country-picker-btn:focus { box-shadow: 0 0 0 2px rgba(59,130,246,.15); border-color: #3b82f6; outline: none; }
+    #country-picker-btn:hover { background: #f9fafb; }
+    #country-list li button {
+        width: 100%; text-align: left; background: none; border: none;
+        padding: 7px 14px; font-size: .84rem; display: flex;
+        align-items: center; gap: 10px; cursor: pointer; color: #111827;
+    }
+    #country-list li button:hover,
+    #country-list li button.active { background: #eff6ff; }
+    #country-list li button .dial { color: #6b7280; font-size:.78rem;
+                                    font-variant-numeric:tabular-nums; margin-left:auto; }
     .pin-input {
         letter-spacing: .3em; font-size: 1.2rem; font-weight: 700;
         text-align: center; width: 110px; flex-shrink: 0;
@@ -203,19 +212,78 @@ usort($countries, fn($a, $b) =>
             </div>
 
             <div id="phone-unlocked" class="d-none">
-                <label class="form-label small text-muted" for="pref-phone">Number</label>
-                <div class="input-group input-group-sm phone-input-group mb-2">
-                    <select id="phone-country" class="form-select form-select-sm">
-                        @foreach($countries as [$iso, $dial, $name])
-                            <option value="{{ $dial }}" data-iso="{{ $iso }}"
-                                    {{ $iso === $defaultCountry ? 'selected' : '' }}>
-                                {{ $iso }} {{ $dial }} — {{ $name }}
-                            </option>
-                        @endforeach
-                    </select>
-                    <input type="tel" id="pref-phone" class="form-control"
-                           placeholder="820000000" autocomplete="tel-national">
+                {{-- Encode country list as JSON for the JS custom dropdown --}}
+                @php
+                    $countriesJson = json_encode(array_values(array_map(
+                        fn($c) => ['iso' => $c[0], 'dial' => $c[1], 'name' => $c[2]],
+                        $countries
+                    )));
+                @endphp
+
+                <label class="form-label small text-muted">Number</label>
+
+                {{-- Custom country-code picker + number input --}}
+                <div class="d-flex gap-0 mb-2" id="phone-input-row">
+
+                    {{-- Trigger button (shows selected flag + dial code) --}}
+                    <button type="button" id="country-picker-btn"
+                            class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 flex-shrink-0"
+                            style="border-radius:10px 0 0 10px; border-right:none;
+                                   min-width:90px; font-size:.85rem; padding:6px 10px;"
+                            aria-haspopup="listbox" aria-expanded="false">
+                        <img id="country-flag-img" src="" alt="" width="20" height="14"
+                             style="border-radius:2px;object-fit:cover;flex-shrink:0"
+                             onerror="this.style.display='none';
+                                      document.getElementById('country-flag-fb').style.display='inline'"
+                             loading="lazy">
+                        <span id="country-flag-fb" class="d-none"
+                              style="font-size:.7rem;font-weight:700;letter-spacing:.04em"></span>
+                        <span id="country-dial-label" style="font-variant-numeric:tabular-nums"></span>
+                        <i class="bi bi-chevron-down ms-auto" style="font-size:.65rem;opacity:.5"></i>
+                    </button>
+
+                    {{-- Number input --}}
+                    <input type="tel" id="pref-phone" class="form-control form-control-sm"
+                           placeholder="794999139" autocomplete="tel-national"
+                           style="border-radius:0 10px 10px 0; font-size:.85rem;">
+
+                    {{-- Hidden input carries the resolved dial code for savePhone() --}}
+                    <input type="hidden" id="phone-country" value="{{ $countries[0][1] ?? '+27' }}">
                 </div>
+
+                {{-- Dropdown panel --}}
+                <div id="country-picker-dropdown"
+                     class="d-none"
+                     style="position:absolute; z-index:1200; width:calc(100% - 2rem);
+                            max-height:260px; overflow:hidden; display:flex;
+                            flex-direction:column; background:#fff;
+                            border:1px solid #e5e7eb; border-radius:12px;
+                            box-shadow:0 8px 24px rgba(0,0,0,.12);">
+
+                    {{-- Search within dropdown --}}
+                    <div class="p-2 border-bottom">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0">
+                                <i class="bi bi-search" style="font-size:.75rem;color:#9ca3af"></i>
+                            </span>
+                            <input type="text" id="country-search"
+                                   class="form-control border-start-0 ps-0"
+                                   placeholder="Search country…"
+                                   autocomplete="off"
+                                   style="border-radius:0 8px 8px 0; font-size:.83rem;">
+                        </div>
+                    </div>
+
+                    {{-- Scrollable list --}}
+                    <ul id="country-list" role="listbox"
+                        style="overflow-y:auto; flex:1; list-style:none;
+                               margin:0; padding:4px 0;">
+                    </ul>
+                </div>
+
+                {{-- Pass country data to JS --}}
+                <script id="pwa-countries-data" type="application/json">{{ $countriesJson }}</script>
+
                 <button id="save-phone-btn"
                         class="btn btn-outline-primary btn-sm w-100">
                     Save number
@@ -226,38 +294,112 @@ usort($countries, fn($a, $b) =>
     </div>
 
     {{-- Config-driven custom fields --}}
-    @php $customFields = config('pwa.user_fields', []); @endphp
+    @php
+        $customFields = config('pwa.user_fields', []);
+        $registry     = app(\Lightworx\FilamentPwa\FieldOptions\FieldOptionsRegistry::class);
+    @endphp
     @if(!empty($customFields))
     <div class="card shadow-sm border-0 mb-3">
         <div class="card-body">
             <div class="section-label">Additional settings</div>
             @foreach($customFields as $field)
+                @php
+                    $fKey         = $field['key'];
+                    $fType        = $field['type'];
+                    $fOptions     = $field['options'] ?? [];
+                    $isDynamic    = $fOptions === 'dynamic';
+                    $isSearchable = $isDynamic && !empty($field['searchable']);
+                    $placeholder  = $field['placeholder'] ?? '— select —';
+
+                    // For non-searchable dynamic fields, resolve now so options
+                    // are embedded in the HTML — no AJAX request needed.
+                    $resolvedOptions = ($isDynamic && !$isSearchable && $registry->has($fKey))
+                        ? $registry->resolve($fKey)
+                        : [];
+                @endphp
                 <div class="mb-3">
                     <label class="form-label small text-muted"
-                           for="pref-custom-{{ $field['key'] }}">
+                           for="pref-custom-{{ $fKey }}">
                         {{ $field['label'] }}
                     </label>
-                    @if($field['type'] === 'select')
-                        <select id="pref-custom-{{ $field['key'] }}"
+
+                    @if($fType === 'select' && $isSearchable)
+                        {{--
+                            AJAX / searchable select.
+                            Rendered as a text input + hidden value + results list.
+                            JS fetches /app/field-options/{key}?search=… on input.
+                        --}}
+                        <div class="pwa-searchable-select"
+                             data-field-key="{{ $fKey }}"
+                             data-options-url="{{ url('/app/field-options/' . $fKey) }}"
+                             data-placeholder="{{ $placeholder }}">
+                            <div class="input-group input-group-sm">
+                                <input type="text"
+                                       class="form-control pwa-search-input"
+                                       placeholder="{{ $placeholder }}"
+                                       autocomplete="off"
+                                       aria-label="{{ $field['label'] }}">
+                                <span class="input-group-text text-muted" style="cursor:default">
+                                    <i class="bi bi-search" style="font-size:.75rem"></i>
+                                </span>
+                            </div>
+                            {{-- Hidden input carries the actual saved value --}}
+                            <input type="hidden"
+                                   id="pref-custom-{{ $fKey }}"
+                                   data-custom-key="{{ $fKey }}">
+                            <div class="pwa-search-results list-group mt-1 d-none"
+                                 style="max-height:180px;overflow-y:auto;font-size:.85rem;
+                                        border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.1)">
+                            </div>
+                            <div class="pwa-search-selected text-muted d-none"
+                                 style="font-size:.78rem;margin-top:4px">
+                                {{-- Shows the label of the currently selected value --}}
+                            </div>
+                        </div>
+
+                    @elseif($fType === 'select')
+                        {{--
+                            Standard select — options are either a static array
+                            from config or a dynamic resolver called at render time.
+                        --}}
+                        <select id="pref-custom-{{ $fKey }}"
                                 class="form-select form-select-sm"
-                                data-custom-key="{{ $field['key'] }}">
-                            <option value="">— select —</option>
-                            @foreach($field['options'] ?? [] as $val => $lbl)
-                                <option value="{{ $val }}">{{ $lbl }}</option>
-                            @endforeach
+                                data-custom-key="{{ $fKey }}">
+                            <option value="">{{ $placeholder }}</option>
+
+                            @if($isDynamic)
+                                @foreach($resolvedOptions as $opt)
+                                    <option value="{{ $opt['value'] }}">{{ $opt['label'] }}</option>
+                                @endforeach
+                            @else
+                                @foreach($fOptions as $optVal => $optLbl)
+                                    <option value="{{ $optVal }}">{{ $optLbl }}</option>
+                                @endforeach
+                            @endif
                         </select>
-                    @elseif($field['type'] === 'toggle')
+
+                        @if($isDynamic && !$registry->has($fKey))
+                            <div class="text-warning small mt-1">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                No resolver registered for <code>{{ $fKey }}</code>.
+                                Call <code>PwaFieldOptions::register('{{ $fKey }}', ...)</code>
+                                in your AppServiceProvider.
+                            </div>
+                        @endif
+
+                    @elseif($fType === 'toggle')
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" role="switch"
-                                   id="pref-custom-{{ $field['key'] }}"
-                                   data-custom-key="{{ $field['key'] }}">
+                                   id="pref-custom-{{ $fKey }}"
+                                   data-custom-key="{{ $fKey }}">
                         </div>
+
                     @else
-                        <input type="{{ $field['type'] }}"
-                               id="pref-custom-{{ $field['key'] }}"
+                        <input type="{{ $fType }}"
+                               id="pref-custom-{{ $fKey }}"
                                class="form-control form-control-sm"
-                               placeholder="{{ $field['placeholder'] ?? '' }}"
-                               data-custom-key="{{ $field['key'] }}">
+                               placeholder="{{ $placeholder }}"
+                               data-custom-key="{{ $fKey }}">
                     @endif
                 </div>
             @endforeach
@@ -442,20 +584,31 @@ usort($countries, fn($a, $b) =>
             setV('pref-name',  data.name);
             setV('pref-email', data.email);
 
-            // Populate phone field — strip dial code prefix if present
+            // Restore phone — strip the dial code prefix so only the local
+            // number shows in the input. The custom picker already holds the dial code.
             if (data.phone) {
-                const dial = $('phone-country')?.value ?? '';
-                setV('pref-phone', dial && data.phone.startsWith(dial)
-                    ? data.phone.slice(dial.length)
-                    : data.phone
-                );
+                const dialCode = $('phone-country')?.value ?? '';
+                const local    = dialCode && data.phone.startsWith(dialCode)
+                    ? data.phone.slice(dialCode.length)
+                    : data.phone.replace(/^\+[0-9]{1,3}/, '');
+                setV('pref-phone', local);
             }
 
-            // Custom fields
+            // Custom fields — standard inputs and plain selects
             const custom = data.custom_settings ?? {};
             document.querySelectorAll('[data-custom-key]').forEach(el => {
                 const v = custom[el.dataset.customKey];
-                el.type === 'checkbox' ? (el.checked = !!v) : (el.value = v ?? '');
+                if (el.type === 'hidden' && el.closest('.pwa-searchable-select')) {
+                    // Searchable select — restore saved value + fetch its label
+                    if (v) {
+                        el.value = v;
+                        restoreSearchableLabel(el.closest('.pwa-searchable-select'), v);
+                    }
+                } else if (el.type === 'checkbox') {
+                    el.checked = !!v;
+                } else {
+                    el.value = v ?? '';
+                }
             });
 
             state.emailVerified = !!data.email_verified;
@@ -574,6 +727,158 @@ usort($countries, fn($a, $b) =>
         }
     }
 
+    // ── Country picker ─────────────────────────────────────────────────────
+    (function initCountryPicker() {
+        const dataEl = document.getElementById('pwa-countries-data');
+        if (!dataEl) return;
+
+        const countries   = JSON.parse(dataEl.textContent);
+        const btnEl       = document.getElementById('country-picker-btn');
+        const dropdown    = document.getElementById('country-picker-dropdown');
+        const listEl      = document.getElementById('country-list');
+        const searchEl    = document.getElementById('country-search');
+        const flagImg     = document.getElementById('country-flag-img');
+        const flagFb      = document.getElementById('country-flag-fb');  // fallback text
+        const dialLabel   = document.getElementById('country-dial-label');
+        const hiddenInput = document.getElementById('phone-country');
+
+        if (!btnEl || !dropdown || !listEl) return;
+
+        // ── Flag helpers ──────────────────────────────────────────────────
+        // Base path comes from <meta name="flags-path"> set in app.blade.php.
+        // Falls back to /pwa/flags if the meta tag is absent.
+        const FLAGS_BASE = (
+            document.querySelector('meta[name="flags-path"]')?.content
+            ?? '/pwa/flags'
+        ).replace(/\/$/, '');  // strip trailing slash
+
+        function flagUrl(iso) {
+            return FLAGS_BASE + '/' + iso.toLowerCase() + '.png';
+        }
+
+        // ── Select a country ──────────────────────────────────────────────
+        function selectCountry(country) {
+            // Update trigger button
+            flagImg.src          = flagUrl(country.iso);
+            flagImg.alt          = country.name;
+            flagImg.style.display = 'inline';
+            flagFb.textContent   = country.iso;   // shown if image fails
+            flagFb.style.display = 'none';
+            dialLabel.textContent = country.dial;
+
+            // Update hidden input (read by savePhone)
+            hiddenInput.value = country.dial;
+
+            // Aria
+            btnEl.setAttribute('aria-expanded', 'false');
+            closeDropdown();
+        }
+
+        // ── Render list ───────────────────────────────────────────────────
+        function renderList(filter) {
+            const q    = (filter || '').toLowerCase();
+            const items = q
+                ? countries.filter(c =>
+                    c.name.toLowerCase().includes(q) ||
+                    c.iso.toLowerCase().includes(q)  ||
+                    c.dial.includes(q)
+                  )
+                : countries;
+
+            listEl.innerHTML = '';
+
+            if (!items.length) {
+                listEl.innerHTML =
+                    '<li><div class="text-muted small px-3 py-2">No results</div></li>';
+                return;
+            }
+
+            items.forEach(c => {
+                const li  = document.createElement('li');
+                const btn = document.createElement('button');
+                btn.type  = 'button';
+                btn.setAttribute('role', 'option');
+                btn.setAttribute('data-iso', c.iso);
+
+                // Flag image
+                const img = document.createElement('img');
+                img.src    = flagUrl(c.iso);
+                img.alt    = c.name;
+                img.width  = 20;
+                img.height = 14;
+                img.style.cssText = 'border-radius:2px;object-fit:cover;flex-shrink:0';
+                img.onerror = function() {
+                    this.style.display = 'none';
+                    const fb = document.createElement('span');
+                    fb.textContent  = c.iso;
+                    fb.style.cssText = 'font-size:.7rem;font-weight:700';
+                    btn.insertBefore(fb, btn.firstChild);
+                };
+
+                // Name
+                const name = document.createElement('span');
+                name.textContent = c.name;
+
+                // Dial code (right-aligned)
+                const dial = document.createElement('span');
+                dial.className   = 'dial';
+                dial.textContent = c.dial;
+
+                btn.appendChild(img);
+                btn.appendChild(name);
+                btn.appendChild(dial);
+                btn.addEventListener('click', () => selectCountry(c));
+
+                // Highlight currently selected
+                if (c.dial === hiddenInput.value) btn.classList.add('active');
+
+                li.appendChild(btn);
+                listEl.appendChild(li);
+            });
+        }
+
+        // ── Open / close ──────────────────────────────────────────────────
+        function openDropdown() {
+            renderList('');
+            dropdown.style.display = 'flex';
+            dropdown.classList.remove('d-none');
+            btnEl.setAttribute('aria-expanded', 'true');
+            setTimeout(() => searchEl?.focus(), 40);
+        }
+
+        function closeDropdown() {
+            dropdown.style.display = 'none';
+            dropdown.classList.add('d-none');
+            btnEl.setAttribute('aria-expanded', 'false');
+            if (searchEl) searchEl.value = '';
+        }
+
+        btnEl.addEventListener('click', () => {
+            const isOpen = btnEl.getAttribute('aria-expanded') === 'true';
+            isOpen ? closeDropdown() : openDropdown();
+        });
+
+        // Close on outside click
+        document.addEventListener('click', e => {
+            if (!btnEl.contains(e.target) && !dropdown.contains(e.target)) {
+                closeDropdown();
+            }
+        });
+
+        // Close on Escape
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeDropdown();
+        });
+
+        // Filter on search input
+        searchEl?.addEventListener('input', () => renderList(searchEl.value));
+
+        // ── Initialise with default country ───────────────────────────────
+        const defaultIso  = '{{ $defaultCountry }}';
+        const defaultC    = countries.find(c => c.iso === defaultIso) || countries[0];
+        if (defaultC) selectCountry(defaultC);
+    })();
+
     // ── Save phone ─────────────────────────────────────────────────────────
     async function savePhone() {
         const btn    = $('save-phone-btn');
@@ -634,8 +939,129 @@ usort($countries, fn($a, $b) =>
         });
     }
 
+    // ── Searchable select ──────────────────────────────────────────────────
+    //
+    // Each .pwa-searchable-select widget works as follows:
+    //   - Text input drives a debounced AJAX search to /app/field-options/{key}
+    //   - Results appear in a floating .pwa-search-results list
+    //   - Selecting a result writes the value to the hidden input and hides the list
+    //   - On load, if a value is saved, we fetch its label from the server to display
+
+    let searchTimers = {};
+
+    function initSearchableSelects() {
+        document.querySelectorAll('.pwa-searchable-select').forEach(widget => {
+            const key        = widget.dataset.fieldKey;
+            const url        = widget.dataset.optionsUrl;
+            const searchInput= widget.querySelector('.pwa-search-input');
+            const hiddenInput= widget.querySelector('input[type="hidden"]');
+            const resultsList= widget.querySelector('.pwa-search-results');
+            const selectedEl = widget.querySelector('.pwa-search-selected');
+
+            if (!searchInput || !hiddenInput || !resultsList) return;
+
+            // Fetch results from server
+            async function fetchOptions(search) {
+                try {
+                    const res = await fetch(url + (search ? '?search=' + encodeURIComponent(search) : ''), {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    if (!res.ok) return [];
+                    const data = await res.json();
+                    return data.options ?? [];
+                } catch { return []; }
+            }
+
+            // Render results into the dropdown list
+            function renderResults(options) {
+                resultsList.innerHTML = '';
+                if (!options.length) {
+                    resultsList.innerHTML =
+                        '<div class="list-group-item text-muted small py-2">No results</div>';
+                } else {
+                    options.forEach(opt => {
+                        const item = document.createElement('button');
+                        item.type = 'button';
+                        item.className = 'list-group-item list-group-item-action py-2';
+                        item.textContent = opt.label;
+                        item.addEventListener('mousedown', e => {
+                            e.preventDefault(); // prevent blur before click registers
+                            selectOption(opt.value, opt.label);
+                        });
+                        resultsList.appendChild(item);
+                    });
+                }
+                resultsList.classList.remove('d-none');
+            }
+
+            // Commit a selection
+            function selectOption(value, label) {
+                hiddenInput.value   = value;
+                searchInput.value   = '';
+                searchInput.placeholder = label;   // show label as placeholder
+                if (selectedEl) {
+                    selectedEl.textContent = 'Selected: ' + label;
+                    selectedEl.classList.remove('d-none');
+                }
+                resultsList.classList.add('d-none');
+                resultsList.innerHTML = '';
+            }
+
+            // Debounced input handler
+            searchInput.addEventListener('input', () => {
+                clearTimeout(searchTimers[key]);
+                const q = searchInput.value.trim();
+                if (!q) {
+                    resultsList.classList.add('d-none');
+                    return;
+                }
+                searchTimers[key] = setTimeout(async () => {
+                    const options = await fetchOptions(q);
+                    renderResults(options);
+                }, 280);
+            });
+
+            // Hide results on blur (slight delay so mousedown fires first)
+            searchInput.addEventListener('blur', () => {
+                setTimeout(() => resultsList.classList.add('d-none'), 150);
+            });
+
+            // Show results again on focus if there's a query
+            searchInput.addEventListener('focus', () => {
+                if (searchInput.value.trim()) searchInput.dispatchEvent(new Event('input'));
+            });
+        });
+    }
+
+    // Restore the displayed label for a saved searchable-select value
+    async function restoreSearchableLabel(widget, savedValue) {
+        const url        = widget.dataset.optionsUrl;
+        const searchInput= widget.querySelector('.pwa-search-input');
+        const selectedEl = widget.querySelector('.pwa-search-selected');
+        if (!url || !searchInput) return;
+
+        try {
+            // Fetch with no search — resolver may return all options or just the match
+            // For large lists the resolver should return the matching item when
+            // $search is null; small lists return everything and we find it here.
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) return;
+            const data    = await res.json();
+            const options = data.options ?? [];
+            const match   = options.find(o => String(o.value) === String(savedValue));
+            if (match) {
+                searchInput.placeholder = match.label;
+                if (selectedEl) {
+                    selectedEl.textContent = 'Selected: ' + match.label;
+                    selectedEl.classList.remove('d-none');
+                }
+            }
+        } catch { /* non-fatal */ }
+    }
+
     // ── Boot ───────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
+        initSearchableSelects();
         loadPreferences();
         bindPushToggle();
 
