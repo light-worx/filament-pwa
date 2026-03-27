@@ -7,7 +7,7 @@ $allCountries = [
     ['NA','+264','Namibia'],['MZ','+258','Mozambique'],['TZ','+255','Tanzania'],
     ['UG','+256','Uganda'],['RW','+250','Rwanda'],['ET','+251','Ethiopia'],
     ['EG','+20','Egypt'],['MA','+212','Morocco'],['DZ','+213','Algeria'],
-    ['TN','+216','Tunisia'],['SN','+221','Senegal'],['CI','+225','Côte d\'Ivoire'],
+    ['TN','+216','Tunisia'],['SN','+221','Senegal'],['CI','+225',"Côte d'Ivoire"],
     ['CM','+237','Cameroon'],['AO','+244','Angola'],['IN','+91','India'],
     ['PK','+92','Pakistan'],['BD','+880','Bangladesh'],['LK','+94','Sri Lanka'],
     ['NP','+977','Nepal'],['PH','+63','Philippines'],['ID','+62','Indonesia'],
@@ -214,10 +214,13 @@ usort($countries, fn($a, $b) =>
             <div id="phone-unlocked" class="d-none">
                 {{-- Encode country list as JSON for the JS custom dropdown --}}
                 @php
-                    $countriesJson = json_encode(array_values(array_map(
-                        fn($c) => ['iso' => $c[0], 'dial' => $c[1], 'name' => $c[2]],
-                        $countries
-                    )));
+                    $countriesJson = json_encode(
+                        array_values(array_map(
+                            fn($c) => ['iso' => $c[0], 'dial' => $c[1], 'name' => $c[2]],
+                            $countries
+                        )),
+                        JSON_HEX_TAG | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                    );
                 @endphp
 
                 <label class="form-label small text-muted">Number</label>
@@ -282,7 +285,7 @@ usort($countries, fn($a, $b) =>
                 </div>
 
                 {{-- Pass country data to JS --}}
-                <script id="pwa-countries-data" type="application/json">{{ $countriesJson }}</script>
+                <script id="pwa-countries-data" type="application/json">{!! $countriesJson !!}</script>
 
                 <button id="save-phone-btn"
                         class="btn btn-outline-primary btn-sm w-100">
