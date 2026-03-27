@@ -48,7 +48,7 @@ Route::get('/manifest.json', function () {
         'start_url' => config('pwa.app_route', '/'),
         'display' => 'standalone',
         'background_color' => '#ffffff',
-        'theme_color' => config('pwa.theme_color'),
+        'theme_color' => config('pwa.theme.theme_color'),
         'icons' => [
             [
                 'src' => '/pwa/icons/icon-192.png',
