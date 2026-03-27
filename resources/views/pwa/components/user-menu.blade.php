@@ -247,7 +247,7 @@ usort($countries, fn($a, $b) =>
 
                     {{-- Number input --}}
                     <input type="tel" id="pref-phone" class="form-control form-control-sm"
-                           placeholder="794999139" autocomplete="tel-national"
+                           placeholder="820000000" autocomplete="tel-national"
                            style="border-radius:0 10px 10px 0; font-size:.85rem;">
 
                     {{-- Hidden input carries the resolved dial code for savePhone() --}}
