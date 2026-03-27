@@ -21,30 +21,27 @@ public function boot(): void
     );
 
     // ── Closure with search support (for searchable/AJAX fields) ─────────
-    // When the panel restores a saved value after a page refresh it sends
-    // ?value=123, which the controller forwards as the string "id:123".
-    // Handle this in your resolver to do a targeted lookup instead of LIKE:
-    PwaFieldOptions::register('circuit_id', fn(?string $search) =>
-        Circuit::when(
-            $search && str_starts_with($search, 'id:'),
-            // Targeted lookup — return just the saved record for label restore
-            fn($q) => $q->whereKey(ltrim($search, 'id:')),
-            // Normal search — filter by name
-            fn($q) => $q->when($search, fn($q2) =>
-                $q2->where('circuit', 'like', "%{$search}%")
-            )
-        )->limit(50)->pluck('circuit', 'id')->toArray()
+    // For small-to-medium lists (under ~200 rows), no special handling needed.
+    // The controller calls the resolver with null on restore and finds the match.
+    PwaFieldOptions::register('region', fn(?string $search) =>
+        Region::when($search, fn($q) => $q->where('name', 'like', "%{$search}%"))
+               ->orderBy('name')
+               ->pluck('name', 'id')
+               ->toArray()
     );
 
-    // Simple version if you don't need to optimise the restore lookup
-    // (works fine for small lists; the controller will filter client-side):
-    PwaFieldOptions::register('product', fn(?string $search) =>
-        Product::when($search && !str_starts_with($search, 'id:'),
-                    fn($q) => $q->where('name', 'like', "%{$search}%"))
-                ->orderBy('name')
-                ->limit(50)
-                ->pluck('name', 'id')
-                ->toArray()
+    // For large lists with limit(), add an is_numeric() branch so the controller
+    // can do a targeted lookup when restoring a saved value after page refresh:
+    PwaFieldOptions::register('circuit_id', fn(?string $search) =>
+        Circuit::when(
+            is_numeric($search),
+            // Restore mode: $search is the saved ID — fetch that specific record
+            fn($q) => $q->whereKey($search),
+            // Search mode: $search is a string the user typed
+            fn($q) => $q->when($search,
+                fn($q2) => $q2->where('circuit', 'like', "%{$search}%")
+            )
+        )->limit(50)->pluck('circuit', 'id')->toArray()
     );
 
     // ── Class-based resolver (supports constructor injection) ─────────────

@@ -14,28 +14,35 @@ class FieldOptionsController extends Controller
     /**
      * GET /app/field-options/{key}
      *
-     * Query parameters (both optional):
-     *   ?search=foo   — forwarded to the resolver for filtered/AJAX results
-     *   ?value=123    — requests a targeted lookup of a single saved value
-     *                   so the UI can restore its label after a page refresh.
-     *                   The resolver receives the value as the $search argument
-     *                   prefixed with "id:" so it can distinguish the two modes:
+     * Two modes, both optional:
+     *
+     *   ?search=foo   Forwarded directly to the resolver as $search.
+     *                 Used for live filtering as the user types.
+     *
+     *   ?value=123    Label-restore mode. Called once on panel open to recover
+     *                 the display label for a previously saved value.
+     *
+     *                 Strategy:
+     *                 1. Call resolver with null — returns the default list.
+     *                 2. If the saved value is in that list, return it. Done.
+     *                 3. If not found (large list with limit()), call resolver
+     *                    again with the raw value as $search so the developer's
+     *                    resolver can do a targeted lookup if it wants to.
+     *                 4. Return whichever match is found, or empty options.
+     *
+     *                 This means resolvers work with no changes for small lists.
+     *                 For large lists, the developer can optionally handle the
+     *                 case where $search is a numeric ID string:
      *
      *                   PwaFieldOptions::register('circuit_id', fn(?string $search) =>
      *                       Circuit::when(
-     *                           $search && str_starts_with($search, 'id:'),
-     *                           fn($q) => $q->whereKey(ltrim($search, 'id:')),
-     *                           fn($q) => $q->when($search, fn($q2) =>
-     *                               $q2->where('circuit', 'like', "%{$search}%")
+     *                           is_numeric($search),
+     *                           fn($q) => $q->whereKey($search),
+     *                           fn($q) => $q->when($search,
+     *                               fn($q2) => $q2->where('circuit', 'like', "%{$search}%")
      *                           )
      *                       )->limit(50)->pluck('circuit', 'id')->toArray()
      *                   );
-     *
-     *                   For resolvers that don't handle the "id:" prefix, the
-     *                   controller falls back to fetching all options (no search)
-     *                   and finding the match client-side — same as before.
-     *
-     * Response: { "options": [{ "value": "1", "label": "Circuit Name" }, ...] }
      */
     public function __invoke(Request $request, string $key): JsonResponse
     {
@@ -46,26 +53,35 @@ class FieldOptionsController extends Controller
             ], 404);
         }
 
-        // ?value= mode: restore label for a single saved value after page refresh.
-        // We pass "id:{value}" as the search string so resolvers can detect it
-        // and do a targeted WHERE IN / whereKey lookup instead of a LIKE search.
+        // ── ?value= label-restore mode ────────────────────────────────────────
         if ($request->filled('value')) {
-            $savedValue = $request->string('value')->toString();
-            $options    = $this->registry->resolve($key, 'id:' . $savedValue);
+            $savedValue = (string) $request->input('value');
 
-            // If the resolver didn't handle the id: prefix (returned everything),
-            // filter down to just the matching item so the response is minimal.
-            $match = collect($options)->first(
-                fn($o) => (string) $o['value'] === (string) $savedValue
+            // Step 1: call resolver with no search (returns default/full list)
+            $options = $this->registry->resolve($key, null);
+            $match   = collect($options)->first(
+                fn($o) => (string) $o['value'] === $savedValue
             );
+
+            // Step 2: not in default list — call resolver with the raw value
+            // so it can do a targeted whereKey/find if it handles numeric IDs
+            if (!$match) {
+                $options = $this->registry->resolve($key, $savedValue);
+                $match   = collect($options)->first(
+                    fn($o) => (string) $o['value'] === $savedValue
+                );
+            }
 
             return response()->json([
                 'options' => $match ? [$match] : [],
             ]);
         }
 
-        // Normal ?search= mode (or no params → return full/default list)
-        $search  = $request->string('search')->toString() ?: null;
+        // ── Normal ?search= or bare call ──────────────────────────────────────
+        $search  = $request->filled('search')
+            ? (string) $request->input('search')
+            : null;
+
         $options = $this->registry->resolve($key, $search);
 
         return response()->json(['options' => $options]);
