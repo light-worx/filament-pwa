@@ -447,13 +447,41 @@ usort($countries, fn($a, $b) =>
     const STORAGE = 'pwa_device_id';
 
     // ── Device ID ──────────────────────────────────────────────────────────
-    function deviceId() {
-        let id = localStorage.getItem(STORAGE);
-        if (!id) {
-            id = (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2));
-            localStorage.setItem(STORAGE, id);
+    // Returns a stable device identifier.
+    // Priority: push subscription endpoint (written by push-notifications.js)
+    //           → existing localStorage value
+    //           → new random UUID (non-push devices)
+    //
+    // When a push subscription exists, push-notifications.js writes the endpoint
+    // to localStorage during checkStatus(). Because that call is async and happens
+    // after service worker registration, we poll briefly on first load to let it
+    // settle before we send the preferences request with the wrong id.
+    async function resolveDeviceId() {
+        const existing = localStorage.getItem(STORAGE);
+
+        // If we already have a value that looks like a push endpoint, use it.
+        if (existing && existing.startsWith('https://')) return existing;
+
+        // If push is supported, wait up to 2 s for push-notifications.js to
+        // write the endpoint. Poll every 100 ms.
+        if ('serviceWorker' in navigator && 'PushManager' in window) {
+            for (let i = 0; i < 20; i++) {
+                await new Promise(r => setTimeout(r, 100));
+                const settled = localStorage.getItem(STORAGE);
+                if (settled && settled.startsWith('https://')) return settled;
+            }
         }
+
+        // No push subscription — fall back to existing UUID or create one.
+        if (existing) return existing;
+        const id = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
+        localStorage.setItem(STORAGE, id);
         return id;
+    }
+
+    // Synchronous version for use after resolveDeviceId() has already run.
+    function deviceId() {
+        return localStorage.getItem(STORAGE) ?? '';
     }
 
     // ── Fetch helper ───────────────────────────────────────────────────────
@@ -575,8 +603,11 @@ usort($countries, fn($a, $b) =>
     // ── Load preferences ───────────────────────────────────────────────────
     async function loadPreferences() {
         try {
+            // resolveDeviceId() waits for push-notifications.js to write the
+            // push endpoint into localStorage before we fire the request.
+            const id  = await resolveDeviceId();
             const res = await fetch(
-                '/app/preferences?device_id=' + encodeURIComponent(deviceId()),
+                '/app/preferences?device_id=' + encodeURIComponent(id),
                 { headers: { 'Accept': 'application/json' } }
             );
             if (!res.ok) return;

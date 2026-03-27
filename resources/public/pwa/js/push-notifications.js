@@ -48,6 +48,12 @@
             body:    JSON.stringify(json),
         });
         if (!res.ok) throw new Error('Server error: ' + res.status);
+
+        // Store the endpoint as the canonical device_id so the user-menu's
+        // preference loader finds the same UserPreference row the push
+        // subscription is linked to.
+        try { localStorage.setItem('pwa_device_id', subscription.endpoint); } catch {}
+
         return res.json();
     }
 
@@ -127,6 +133,16 @@
         if (!sub) {
             return { subscribed: false, permission: Notification.permission, supported: true };
         }
+
+        // Ensure localStorage always reflects the push endpoint as device_id.
+        // This covers page loads where the subscription already exists from a
+        // previous session — the user-menu JS reads this key to load preferences.
+        try {
+            const stored = localStorage.getItem('pwa_device_id');
+            if (stored !== sub.endpoint) {
+                localStorage.setItem('pwa_device_id', sub.endpoint);
+            }
+        } catch {}
 
         // Browser has a subscription — confirm server also has it
         const serverHasIt = await isSubscribedOnServer(sub.endpoint);
@@ -225,7 +241,14 @@
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker
             .register('/service-worker.js?v=' + APP_VERSION)
-            .then(() => initTopBarPushButton())
+            .then(async () => {
+                // Run checkStatus immediately after SW registers so it can
+                // write the push endpoint to localStorage as early as possible.
+                // initTopBarPushButton also calls checkStatus but this fires first
+                // and gives the user-menu's resolveDeviceId() a head start.
+                await checkStatus();
+                initTopBarPushButton();
+            })
             .catch(err => console.error('PWA: SW registration failed', err));
     }
 
