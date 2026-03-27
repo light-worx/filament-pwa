@@ -10,6 +10,8 @@ return [
     'app_name'    => env('PWA_APP_NAME', env('APP_NAME', 'My App')),
     'app_short'   => env('PWA_APP_SHORT', 'App'),
     'description' => env('PWA_DESCRIPTION', 'A progressive web application'),
+    'icon-192'    => '/pwa/icons/icon-192.png',
+    'icon-512'    => '/pwa/icons/icon-512.png',
 
     /*
     |--------------------------------------------------------------------------

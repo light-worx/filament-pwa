@@ -46,17 +46,18 @@ Route::get('/manifest.json', function () {
         'name' => config('app.name'),
         'short_name' => config('app.name'),
         'start_url' => config('pwa.app_route', '/'),
+        'description' => config('.pwa.description'),
         'display' => 'standalone',
         'background_color' => '#ffffff',
         'theme_color' => config('pwa.theme.theme_color'),
         'icons' => [
             [
-                'src' => '/pwa/icons/icon-192.png',
+                'src' => config('pwa.icon-192','/pwa/icons/icon-192.png'),
                 'sizes' => '192x192',
                 'type' => 'image/png',
             ],
             [
-                'src' => '/pwa/icons/icon-512.png',
+                'src' => config('pwa.icon-512','/pwa/icons/icon-512.png'),
                 'sizes' => '512x512',
                 'type' => 'image/png',
             ],
