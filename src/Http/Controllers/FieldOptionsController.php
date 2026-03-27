@@ -12,22 +12,30 @@ class FieldOptionsController extends Controller
     public function __construct(private FieldOptionsRegistry $registry) {}
 
     /**
-     * GET /app/field-options/{key}?search=foo
+     * GET /app/field-options/{key}
      *
-     * Returns the resolved options for the given field key as JSON.
-     * The optional `search` query parameter is forwarded to the resolver,
-     * allowing server-side filtering for large lists.
+     * Query parameters (both optional):
+     *   ?search=foo   — forwarded to the resolver for filtered/AJAX results
+     *   ?value=123    — requests a targeted lookup of a single saved value
+     *                   so the UI can restore its label after a page refresh.
+     *                   The resolver receives the value as the $search argument
+     *                   prefixed with "id:" so it can distinguish the two modes:
      *
-     * Response shape:
-     *   {
-     *     "options": [
-     *       { "value": "1", "label": "Western Cape" },
-     *       { "value": "2", "label": "Gauteng" }
-     *     ]
-     *   }
+     *                   PwaFieldOptions::register('circuit_id', fn(?string $search) =>
+     *                       Circuit::when(
+     *                           $search && str_starts_with($search, 'id:'),
+     *                           fn($q) => $q->whereKey(ltrim($search, 'id:')),
+     *                           fn($q) => $q->when($search, fn($q2) =>
+     *                               $q2->where('circuit', 'like', "%{$search}%")
+     *                           )
+     *                       )->limit(50)->pluck('circuit', 'id')->toArray()
+     *                   );
      *
-     * 404 when no resolver is registered for the key — this prevents
-     * probing for arbitrary keys and gives a clear error during development.
+     *                   For resolvers that don't handle the "id:" prefix, the
+     *                   controller falls back to fetching all options (no search)
+     *                   and finding the match client-side — same as before.
+     *
+     * Response: { "options": [{ "value": "1", "label": "Circuit Name" }, ...] }
      */
     public function __invoke(Request $request, string $key): JsonResponse
     {
@@ -38,6 +46,25 @@ class FieldOptionsController extends Controller
             ], 404);
         }
 
+        // ?value= mode: restore label for a single saved value after page refresh.
+        // We pass "id:{value}" as the search string so resolvers can detect it
+        // and do a targeted WHERE IN / whereKey lookup instead of a LIKE search.
+        if ($request->filled('value')) {
+            $savedValue = $request->string('value')->toString();
+            $options    = $this->registry->resolve($key, 'id:' . $savedValue);
+
+            // If the resolver didn't handle the id: prefix (returned everything),
+            // filter down to just the matching item so the response is minimal.
+            $match = collect($options)->first(
+                fn($o) => (string) $o['value'] === (string) $savedValue
+            );
+
+            return response()->json([
+                'options' => $match ? [$match] : [],
+            ]);
+        }
+
+        // Normal ?search= mode (or no params → return full/default list)
         $search  = $request->string('search')->toString() ?: null;
         $options = $this->registry->resolve($key, $search);
 

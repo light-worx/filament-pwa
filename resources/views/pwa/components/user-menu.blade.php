@@ -188,10 +188,8 @@ usort($countries, fn($a, $b) =>
                 <div id="pin-error" class="text-danger small mt-1 d-none"></div>
             </div>
 
-            <div id="pwa-prefs-status" class="text-muted mb-2"></div>
-            <button id="pwa-save-prefs" class="btn btn-primary w-100 btn-sm py-2">
-                Save
-            </button>
+            {{-- Auto-saved — no button needed. Status shown as a toast. --}}
+            <div id="pwa-prefs-status" class="text-success small mt-1 d-none"></div>
         </div>
     </div>
 
@@ -247,7 +245,7 @@ usort($countries, fn($a, $b) =>
 
                     {{-- Number input --}}
                     <input type="tel" id="pref-phone" class="form-control form-control-sm"
-                           placeholder="820000000" autocomplete="tel-national"
+                           placeholder="794999139" autocomplete="tel-national"
                            style="border-radius:0 10px 10px 0; font-size:.85rem;">
 
                     {{-- Hidden input carries the resolved dial code for savePhone() --}}
@@ -624,24 +622,22 @@ usort($countries, fn($a, $b) =>
         }
     }
 
-    // ── Save basic preferences ─────────────────────────────────────────────
-    async function savePreferences() {
-        const btn      = $('pwa-save-prefs');
-        const statusEl = $('pwa-prefs-status');
+    // ── Auto-save preferences ──────────────────────────────────────────────
+    // Triggered on blur / change with a short debounce. No save button needed.
+    let autoSaveTimer = null;
 
-        // Name is required
+    async function savePreferences({ silent = false } = {}) {
+        // Name is required before anything can be saved
         if (!val('pref-name')) {
             show('name-error');
-            $('pref-name')?.focus();
             return;
         }
         hide('name-error');
 
-        btn.disabled = true;
-        if (statusEl) statusEl.textContent = '';
-
         const custom = {};
         document.querySelectorAll('[data-custom-key]').forEach(el => {
+            // Skip the search text input — only the hidden value input matters
+            if (el.classList.contains('pwa-search-input')) return;
             custom[el.dataset.customKey] = el.type === 'checkbox' ? el.checked : el.value;
         });
 
@@ -655,12 +651,15 @@ usort($countries, fn($a, $b) =>
             state.emailVerified = !!data.email_verified;
             state.phoneVerified = !!data.phone_verified;
             applyState();
-            window.showToast?.('Saved');
+            if (!silent) window.showToast?.('Saved');
         } catch (e) {
-            if (statusEl) statusEl.textContent = 'Could not save — try again.';
-        } finally {
-            btn.disabled = false;
+            window.showToast?.('Could not save — try again', 'error');
         }
+    }
+
+    function scheduleAutoSave() {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => savePreferences(), 800);
     }
 
     // ── Send PIN ───────────────────────────────────────────────────────────
@@ -997,17 +996,19 @@ usort($countries, fn($a, $b) =>
                 resultsList.classList.remove('d-none');
             }
 
-            // Commit a selection
+            // Commit a selection — then auto-save so the value is persisted
             function selectOption(value, label) {
-                hiddenInput.value   = value;
-                searchInput.value   = '';
-                searchInput.placeholder = label;   // show label as placeholder
+                hiddenInput.value       = value;
+                searchInput.value       = '';
+                searchInput.placeholder = label;
                 if (selectedEl) {
-                    selectedEl.textContent = 'Selected: ' + label;
+                    selectedEl.textContent = label;
                     selectedEl.classList.remove('d-none');
                 }
                 resultsList.classList.add('d-none');
                 resultsList.innerHTML = '';
+                // Save immediately — don't wait for blur
+                scheduleAutoSave();
             }
 
             // Debounced input handler
@@ -1044,18 +1045,23 @@ usort($countries, fn($a, $b) =>
         if (!url || !searchInput) return;
 
         try {
-            // Fetch with no search — resolver may return all options or just the match
-            // For large lists the resolver should return the matching item when
-            // $search is null; small lists return everything and we find it here.
-            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            // Pass ?value= so the endpoint can do a targeted lookup instead of
+            // returning an unpredictable subset of the full list.
+            const res = await fetch(
+                url + '?value=' + encodeURIComponent(savedValue),
+                { headers: { 'Accept': 'application/json' } }
+            );
             if (!res.ok) return;
             const data    = await res.json();
             const options = data.options ?? [];
-            const match   = options.find(o => String(o.value) === String(savedValue));
+            // Endpoint returns just the matching item when ?value= is supplied,
+            // but fall back to a find() in case the resolver ignores the param.
+            const match = options.find(o => String(o.value) === String(savedValue))
+                       ?? options[0];
             if (match) {
                 searchInput.placeholder = match.label;
                 if (selectedEl) {
-                    selectedEl.textContent = 'Selected: ' + match.label;
+                    selectedEl.textContent = match.label;
                     selectedEl.classList.remove('d-none');
                 }
             }
@@ -1068,18 +1074,24 @@ usort($countries, fn($a, $b) =>
         loadPreferences();
         bindPushToggle();
 
-        $('pwa-save-prefs')  ?.addEventListener('click',  savePreferences);
         $('send-pin-btn')    ?.addEventListener('click',  sendPin);
         $('resend-pin-btn')  ?.addEventListener('click',  sendPin);
         $('verify-pin-btn')  ?.addEventListener('click',  verifyPin);
         $('save-phone-btn')  ?.addEventListener('click',  savePhone);
 
-        // Re-evaluate Verify button whenever name or email changes
-        $('pref-name') ?.addEventListener('input', updateVerifyButton);
-        $('pref-email')?.addEventListener('input', updateVerifyButton);
-
-        // Clear name-error once they start typing
+        // ── Auto-save on blur for text/email fields ───────────────────────
+        ['pref-name', 'pref-email'].forEach(id => {
+            $(id)?.addEventListener('blur',  scheduleAutoSave);
+            $(id)?.addEventListener('input', updateVerifyButton);
+        });
         $('pref-name')?.addEventListener('input', () => hide('name-error'));
+
+        // Auto-save on change for toggle/select custom fields
+        document.querySelectorAll('[data-custom-key]').forEach(el => {
+            if (el.type === 'hidden') return;  // searchable selects save via selectOption
+            const evt = (el.type === 'checkbox' || el.tagName === 'SELECT') ? 'change' : 'blur';
+            el.addEventListener(evt, scheduleAutoSave);
+        });
 
         // Auto-submit PIN on 4th digit
         $('pin-input')?.addEventListener('input', function () {
