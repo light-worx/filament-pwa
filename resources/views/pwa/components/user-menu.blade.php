@@ -419,7 +419,7 @@ usort($countries, fn($a, $b) =>
                     <i class="bi bi-book me-1 text-muted"></i>Preaching reminders
                 </div>
                 <div class="text-muted" style="font-size:.73rem">
-                    Notify me if I'm preaching this weekend
+                    Notify me if I'm preaching this week
                 </div>
             </div>
             <div class="form-check form-switch mb-0 ms-3">
