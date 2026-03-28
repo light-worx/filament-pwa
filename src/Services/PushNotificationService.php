@@ -134,7 +134,7 @@ class PushNotificationService
             'title' => $title,
             'body'  => $body,
             'url'   => $url,
-            'icon'  => '/pwa/icons/icon-192.png',
+            'icon'  => config('pwa.icon-192','/pwa/icons/icon-192.png'),
             'badge' => '/pwa/icons/badge-72.png',
             'tag'   => 'pwa-notification',
         ], $extra));  // $extra can override any of the above
