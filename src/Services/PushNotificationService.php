@@ -4,6 +4,8 @@ namespace Lightworx\FilamentPwa\Services;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Lightworx\FilamentPwa\Models\PushMessage;
+use Lightworx\FilamentPwa\Models\PushMessage;
 use Lightworx\FilamentPwa\Models\PushSubscription;
 use Lightworx\FilamentPwa\Models\UserPreference;
 use Minishlink\WebPush\WebPush;
@@ -34,17 +36,19 @@ class PushNotificationService
      *
      * Usage:
      *   app(PushNotificationService::class)
-     *       ->toPhone('+27820000000', 'Hello', 'Your order is ready', '/orders/123');
+     *       ->toPhone('+27794999139', 'Hello', 'Your order is ready', '/orders/123');
      *
      *   // or via the facade:
-     *   PushNotification::toPhone('+27820000000', 'Hello', 'Your order is ready');
+     *   PushNotification::toPhone('+27794999139', 'Hello', 'Your order is ready');
      */
     public function toPhone(
-        string $phone,
-        string $title,
-        string $body  = '',
-        string $url   = '/',
-        array  $extra = []
+        string  $phone,
+        string  $title,
+        string  $body        = '',
+        string  $url         = '/',
+        array   $extra       = [],
+        ?string $senderName  = null,
+        ?string $senderPhone = null,
     ): SendResult {
         $preferences = UserPreference::where('phone', $phone)
                                      ->where('phone_verified', true)
@@ -53,6 +57,8 @@ class PushNotificationService
         if ($preferences->isEmpty()) {
             return SendResult::noDevices($phone);
         }
+
+        $this->persistMessages($preferences, $title, $body, $senderName, $senderPhone);
 
         return $this->dispatch(
             $this->subscriptionsForPreferences($preferences),
@@ -64,18 +70,22 @@ class PushNotificationService
      * Send to multiple phone numbers in a single batch.
      *
      * Usage:
-     *   PushNotification::toPhones(['+27820000000', '+447911123456'], 'Alert', 'Message');
+     *   PushNotification::toPhones(['+27794999139', '+447911123456'], 'Alert', 'Message');
      */
     public function toPhones(
-        array  $phones,
-        string $title,
-        string $body  = '',
-        string $url   = '/',
-        array  $extra = []
+        array   $phones,
+        string  $title,
+        string  $body        = '',
+        string  $url         = '/',
+        array   $extra       = [],
+        ?string $senderName  = null,
+        ?string $senderPhone = null,
     ): SendResult {
         $preferences = UserPreference::whereIn('phone', $phones)
                                      ->where('phone_verified', true)
                                      ->get();
+
+        $this->persistMessages($preferences, $title, $body, $senderName, $senderPhone);
 
         return $this->dispatch(
             $this->subscriptionsForPreferences($preferences),
@@ -88,13 +98,18 @@ class PushNotificationService
      */
     public function toPreference(
         UserPreference $preference,
-        string $title,
-        string $body  = '',
-        string $url   = '/',
-        array  $extra = []
+        string  $title,
+        string  $body        = '',
+        string  $url         = '/',
+        array   $extra       = [],
+        ?string $senderName  = null,
+        ?string $senderPhone = null,
     ): SendResult {
+        $preferences = collect([$preference]);
+        $this->persistMessages($preferences, $title, $body, $senderName, $senderPhone);
+
         return $this->dispatch(
-            $this->subscriptionsForPreferences(collect([$preference])),
+            $this->subscriptionsForPreferences($preferences),
             $title, $body, $url, $extra
         );
     }
@@ -104,15 +119,43 @@ class PushNotificationService
      * Use sparingly — intended for system-wide announcements.
      */
     public function broadcast(
-        string $title,
-        string $body  = '',
-        string $url   = '/',
-        array  $extra = []
+        string  $title,
+        string  $body        = '',
+        string  $url         = '/',
+        array   $extra       = [],
+        ?string $senderName  = null,
+        ?string $senderPhone = null,
     ): SendResult {
+        $preferences = UserPreference::all();
+        $this->persistMessages($preferences, $title, $body, $senderName, $senderPhone);
+
         return $this->dispatch(PushSubscription::all(), $title, $body, $url, $extra);
     }
 
     // ── Internals ─────────────────────────────────────────────────────────────
+
+    /**
+     * Persist a PushMessage row for every preference in the collection.
+     * These appear in each recipient's inbox at /app/messages.
+     */
+    private function persistMessages(
+        \Illuminate\Support\Collection $preferences,
+        string  $title,
+        string  $body,
+        ?string $senderName,
+        ?string $senderPhone,
+    ): void {
+        foreach ($preferences as $preference) {
+            PushMessage::create([
+                'title'             => $title,
+                'message'           => $body,
+                'sender_name'       => $senderName,
+                'sender_phone'      => $senderPhone,
+                'user_preference_id'=> $preference->id,
+                'seen'              => false,
+            ]);
+        }
+    }
 
     private function subscriptionsForPreferences(Collection $preferences): Collection
     {
@@ -134,7 +177,7 @@ class PushNotificationService
             'title' => $title,
             'body'  => $body,
             'url'   => $url,
-            'icon'  => config('pwa.icon-192','/pwa/icons/icon-192.png'),
+            'icon'  => '/pwa/icons/icon-192.png',
             'badge' => '/pwa/icons/badge-72.png',
             'tag'   => 'pwa-notification',
         ], $extra));  // $extra can override any of the above

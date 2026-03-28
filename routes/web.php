@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Lightworx\FilamentPwa\Http\Controllers\FieldOptionsController;
+use Lightworx\FilamentPwa\Http\Controllers\MessagesController;
 use Lightworx\FilamentPwa\Http\Controllers\PushSubscriptionController;
 use Lightworx\FilamentPwa\Http\Controllers\VerificationController;
 
@@ -38,6 +39,14 @@ Route::prefix('app')->middleware('web')->group(function () {
  
     // ── Phone (gated behind email verification) ───────────────────────────────
     Route::post('/verify/phone',        [VerificationController::class, 'savePhone']);
+ 
+    // ── Messages inbox ────────────────────────────────────────────────────────
+    Route::get('/messages',             [MessagesController::class, 'index']);
+    Route::get('/messages/list',        [MessagesController::class, 'list']);
+    Route::post('/messages/seen',       [MessagesController::class, 'markSeen']);
+    Route::post('/messages/delete',     [MessagesController::class, 'destroy']);
+    Route::post('/messages/reply',      [MessagesController::class, 'reply']);
+    Route::get('/messages/unread',      [MessagesController::class, 'unreadCount']);
  
 });
 

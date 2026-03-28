@@ -43,6 +43,11 @@ class UserPreference extends Model
         return $this->hasMany(PushSubscription::class, 'user_preference_id');
     }
 
+    public function pushMessages()
+    {
+        return $this->hasMany(PushMessage::class);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     public function getSetting(string $key, mixed $default = null): mixed

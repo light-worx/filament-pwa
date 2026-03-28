@@ -411,6 +411,27 @@ usort($countries, fn($a, $b) =>
     @stack('pwa-user-fields')
     @stack('pwa-user-settings')
 
+    {{-- ── Inbox link ──────────────────────────────────────────────────── --}}
+    <a href="/app/messages" class="card shadow-sm border-0 mb-3 text-decoration-none"
+       style="display:block; border-radius:14px;">
+        <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+            <div class="position-relative flex-shrink-0">
+                <i class="bi bi-inbox fs-5 text-muted"></i>
+                <span id="um-unread-badge"
+                      class="position-absolute top-0 start-100 translate-middle
+                             badge rounded-pill bg-primary d-none"
+                      style="font-size:.6rem">0</span>
+            </div>
+            <div class="flex-grow-1">
+                <div class="small fw-semibold text-dark">Messages</div>
+                <div class="text-muted" style="font-size:.73rem" id="um-msg-summary">
+                    Loading…
+                </div>
+            </div>
+            <i class="bi bi-chevron-right text-muted" style="font-size:.75rem"></i>
+        </div>
+    </a>
+
     {{-- ── Push notifications — pinned to bottom ───────────────────────── --}}
     @if(config('pwa.push.enabled', true))
     <div class="mt-auto push-card">
@@ -1134,6 +1155,39 @@ usort($countries, fn($a, $b) =>
         $('pref-phone')?.addEventListener('input', function () {
             this.value = this.value.replace(/\D/g, '');
         });
+
+        // ── Inbox badge ────────────────────────────────────────────────────
+        loadInboxBadge();
     });
+
+    async function loadInboxBadge() {
+        const badge   = document.getElementById('um-unread-badge');
+        const summary = document.getElementById('um-msg-summary');
+        if (!badge || !summary) return;
+
+        try {
+            const id  = await resolveDeviceId();
+            const res = await fetch('/app/messages/unread?device_id=' + encodeURIComponent(id), {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+
+            const unread = data.unread ?? 0;
+            const total  = data.total  ?? 0;
+
+            if (unread > 0) {
+                badge.textContent = unread > 99 ? '99+' : unread;
+                badge.classList.remove('d-none');
+                summary.textContent = `${unread} unread of ${total}`;
+            } else if (total > 0) {
+                badge.classList.add('d-none');
+                summary.textContent = `${total} message${total !== 1 ? 's' : ''}, all read`;
+            } else {
+                badge.classList.add('d-none');
+                summary.textContent = 'No messages yet';
+            }
+        } catch { /* non-fatal */ }
+    }
 })();
 </script>
