@@ -55,7 +55,7 @@ Route::get('/manifest.json', function () {
         'name' => config('app.name'),
         'short_name' => config('app.name'),
         'start_url' => config('pwa.app_route', '/'),
-        'description' => config('.pwa.description'),
+        'description' => config('pwa.description'),
         'display' => 'standalone',
         'background_color' => '#ffffff',
         'theme_color' => config('pwa.theme.theme_color'),

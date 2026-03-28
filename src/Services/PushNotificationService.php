@@ -5,7 +5,6 @@ namespace Lightworx\FilamentPwa\Services;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Lightworx\FilamentPwa\Models\PushMessage;
-use Lightworx\FilamentPwa\Models\PushMessage;
 use Lightworx\FilamentPwa\Models\PushSubscription;
 use Lightworx\FilamentPwa\Models\UserPreference;
 use Minishlink\WebPush\WebPush;
