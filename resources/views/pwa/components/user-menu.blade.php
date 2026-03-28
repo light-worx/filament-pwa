@@ -411,6 +411,24 @@ usort($countries, fn($a, $b) =>
     @stack('pwa-user-fields')
     @stack('pwa-user-settings')
 
+    {{-- ── Preaching reminders opt-in ────────────────────────────────────── --}}
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+            <div>
+                <div class="small fw-semibold">
+                    <i class="bi bi-book me-1 text-muted"></i>Preaching reminders
+                </div>
+                <div class="text-muted" style="font-size:.73rem">
+                    Notify me if I'm preaching this weekend
+                </div>
+            </div>
+            <div class="form-check form-switch mb-0 ms-3">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       id="preachingRemindersToggle">
+            </div>
+        </div>
+    </div>
+
     {{-- ── Inbox link ──────────────────────────────────────────────────── --}}
     <a href="/app/messages" class="card shadow-sm border-0 mb-3 text-decoration-none"
        style="display:block; border-radius:14px;">
@@ -467,6 +485,13 @@ usort($countries, fn($a, $b) =>
     const CSRF    = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
     const STORAGE = 'pwa_device_id';
 
+    // Mirror device_id into a cookie so PHP middleware can read it server-side
+    function writeDeviceIdCookie(id) {
+        try {
+            document.cookie = `pwa_device_id=${encodeURIComponent(id)}; max-age=${60*60*24*365}; path=/; SameSite=Lax`;
+        } catch {}
+    }
+
     // ── Device ID ──────────────────────────────────────────────────────────
     // Returns a stable device identifier.
     // Priority: push subscription endpoint (written by push-notifications.js)
@@ -494,9 +519,13 @@ usort($countries, fn($a, $b) =>
         }
 
         // No push subscription — fall back to existing UUID or create one.
-        if (existing) return existing;
+        if (existing) {
+            writeDeviceIdCookie(existing);
+            return existing;
+        }
         const id = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
         localStorage.setItem(STORAGE, id);
+        writeDeviceIdCookie(id);
         return id;
     }
 
@@ -667,6 +696,10 @@ usort($countries, fn($a, $b) =>
             state.emailVerified = !!data.email_verified;
             state.phoneVerified = !!data.phone_verified;
             state.verifiedEmail = data.email_verified ? (data.email ?? '') : '';
+
+            // Restore preaching reminders toggle
+            const prToggle = $('preachingRemindersToggle');
+            if (prToggle) prToggle.checked = !!data.preaching_reminders;
 
             applyState();
         } catch (e) {
@@ -1125,6 +1158,20 @@ usort($countries, fn($a, $b) =>
         initSearchableSelects();
         loadPreferences();
         bindPushToggle();
+
+        // Preaching reminders toggle
+        $('preachingRemindersToggle')?.addEventListener('change', async function () {
+            try {
+                await post('/app/preferences/preaching-reminders', {
+                    device_id: deviceId(),
+                    enabled:   this.checked,
+                });
+                window.showToast?.(this.checked ? 'Preaching reminders enabled' : 'Preaching reminders disabled');
+            } catch (e) {
+                this.checked = !this.checked;   // revert on failure
+                window.showToast?.('Could not update — try again', 'error');
+            }
+        });
 
         $('send-pin-btn')    ?.addEventListener('click',  sendPin);
         $('resend-pin-btn')  ?.addEventListener('click',  sendPin);

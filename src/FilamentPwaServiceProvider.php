@@ -5,7 +5,11 @@ namespace Lightworx\FilamentPwa;
 use Illuminate\Support\ServiceProvider;
 use Lightworx\FilamentPwa\Console\DownloadFlagsCommand;
 use Lightworx\FilamentPwa\Console\InstallFilamentPwaCommand;
+use Illuminate\Routing\Router;
+use Illuminate\Routing\Router;
 use Lightworx\FilamentPwa\FieldOptions\FieldOptionsRegistry;
+use Lightworx\FilamentPwa\Http\Middleware\PwaDeviceMiddleware;
+use Lightworx\FilamentPwa\Http\Middleware\PwaDeviceMiddleware;
 use Lightworx\FilamentPwa\Services\PushNotificationService;
 
 class FilamentPwaServiceProvider extends ServiceProvider
@@ -38,6 +42,12 @@ class FilamentPwaServiceProvider extends ServiceProvider
             __DIR__ . '/../resources/public/service-worker.js' => public_path('service-worker.js'),
             __DIR__ . '/../resources/public/pwa'               => public_path('pwa'),
         ], 'filament-pwa-assets');
+
+        // ── Named middleware alias ────────────────────────────────────────────────
+        // Developers add 'pwa.device' to their web routes or HTTP kernel to get
+        // $pwaPreference, $pwaCircuitId, $pwaPhone in controllers and views.
+        $router = $this->app->make(Router::class);
+        $router->aliasMiddleware('pwa.device', PwaDeviceMiddleware::class);
 
         // ── Artisan commands ──────────────────────────────────────────────────
         if ($this->app->runningInConsole()) {

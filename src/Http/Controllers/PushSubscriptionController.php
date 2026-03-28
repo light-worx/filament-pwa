@@ -127,12 +127,38 @@ class PushSubscriptionController extends Controller
         }
 
         return response()->json([
-            'name'           => $preference->name,
-            'email'          => $preference->email,
-            'email_verified' => (bool) $preference->email_verified_at,
-            'phone'          => $preference->phone,
-            'phone_verified' => (bool) $preference->phone_verified,
-            'custom_settings'=> $preference->custom_settings,
+            'name'                => $preference->name,
+            'email'               => $preference->email,
+            'email_verified'      => (bool) $preference->email_verified_at,
+            'phone'               => $preference->phone,
+            'phone_verified'      => (bool) $preference->phone_verified,
+            'preaching_reminders' => (bool) $preference->preaching_reminders,
+            'custom_settings'     => $preference->custom_settings,
+        ]);
+    }
+
+    /**
+     * Toggle the preaching reminders opt-in for a device.
+     * Body: { device_id, enabled: true|false }
+     */
+    public function togglePreachingReminders(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'device_id' => 'required|string',
+            'enabled'   => 'required|boolean',
+        ]);
+
+        $preference = UserPreference::where('device_id', $data['device_id'])->first();
+
+        if (!$preference) {
+            return response()->json(['message' => 'Device not found.'], 404);
+        }
+
+        $preference->update(['preaching_reminders' => $data['enabled']]);
+
+        return response()->json([
+            'status'              => 'ok',
+            'preaching_reminders' => (bool) $preference->preaching_reminders,
         ]);
     }
 }

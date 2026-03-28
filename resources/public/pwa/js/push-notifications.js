@@ -15,6 +15,17 @@
         console.warn('PWA: vapid-key meta tag missing. Push notifications will not work.');
     }
 
+    // ── Device ID cookie ─────────────────────────────────────────────────────
+    // Writing pwa_device_id to a cookie (in addition to localStorage) lets
+    // PHP middleware read the device identity on every request without an
+    // AJAX call — enabling server-side access to custom_settings, circuit_id etc.
+    function writeDeviceIdCookie(id) {
+        try {
+            const maxAge = 60 * 60 * 24 * 365; // 1 year
+            document.cookie = `pwa_device_id=${encodeURIComponent(id)}; max-age=${maxAge}; path=/; SameSite=Lax`;
+        } catch {}
+    }
+
     // ── Utilities ────────────────────────────────────────────────────────────
 
     function urlBase64ToUint8Array(base64) {
@@ -52,7 +63,10 @@
         // Store the endpoint as the canonical device_id so the user-menu's
         // preference loader finds the same UserPreference row the push
         // subscription is linked to.
-        try { localStorage.setItem('pwa_device_id', subscription.endpoint); } catch {}
+        try {
+            localStorage.setItem('pwa_device_id', subscription.endpoint);
+            writeDeviceIdCookie(subscription.endpoint);
+        } catch {}
 
         return res.json();
     }
@@ -141,6 +155,7 @@
             const stored = localStorage.getItem('pwa_device_id');
             if (stored !== sub.endpoint) {
                 localStorage.setItem('pwa_device_id', sub.endpoint);
+                writeDeviceIdCookie(sub.endpoint);
             }
         } catch {}
 

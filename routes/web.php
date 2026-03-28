@@ -40,6 +40,9 @@ Route::prefix('app')->middleware('web')->group(function () {
     // ── Phone (gated behind email verification) ───────────────────────────────
     Route::post('/verify/phone',        [VerificationController::class, 'savePhone']);
  
+    // ── Preaching reminders opt-in ────────────────────────────────────────────
+    Route::post('/preferences/preaching-reminders', [PushSubscriptionController::class, 'togglePreachingReminders']);
+ 
     // ── Messages inbox ────────────────────────────────────────────────────────
     Route::get('/messages',             [MessagesController::class, 'index']);
     Route::get('/messages/list',        [MessagesController::class, 'list']);
@@ -63,13 +66,28 @@ Route::get('/manifest.json', function () {
             [
                 'src' => config('pwa.icon-192','/pwa/icons/icon-192.png'),
                 'sizes' => '192x192',
+                'type' => 'image/png'
+            ],
+            [
+                'src' => config('pwa.icon-512','/pwa/icons/icon-512.png'),
+                'sizes' => '512x512',
+                'type' => 'image/png'
+            ]
+        ],
+        'screenshots'=> [
+            [
+                'src' => config('pwa.screenshot','/pwa/icons/screenshot.png'),
+                'sizes' => '1280x720',
                 'type' => 'image/png',
+                'form_factor' => 'wide',
+                'description' => 'A screenshot of the home page'
             ],
             [
                 'src' => config('pwa.icon-512','/pwa/icons/icon-512.png'),
                 'sizes' => '512x512',
                 'type' => 'image/png',
-            ],
-        ],
+                'description' => 'A screenshot of the home page'
+            ]
+        ]
     ]);
 });

@@ -12,6 +12,7 @@ return [
     'description' => env('PWA_DESCRIPTION', 'A progressive web application'),
     'icon-192'    => '/pwa/icons/icon-192.png',
     'icon-512'    => '/pwa/icons/icon-512.png',
+    'screenshot'    => '/pwa/icons/screenshot.png',
 
     /*
     |--------------------------------------------------------------------------
@@ -45,9 +46,8 @@ return [
     |--------------------------------------------------------------------------
     */
     'bottom_items' => [
-        ['icon' => 'bi-house',  'route' => 'app.home', 'label' => 'Home'],
-        ['icon' => 'bi-search', 'url'   => '#',        'label' => 'Search'],
-        ['icon' => 'bi-gear',   'url'   => '#',        'label' => 'Settings'],
+        ['icon' => 'bi-house',          'route' => 'app.home',       'label' => 'Home'],
+        ['icon' => 'bi-chat-left-text',  'url'   => '/app/messages',  'label' => 'Messages', 'badge' => 'messages'],
     ],
 
     /*
