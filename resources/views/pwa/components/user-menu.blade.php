@@ -502,11 +502,20 @@ usort($countries, fn($a, $b) =>
     // to localStorage during checkStatus(). Because that call is async and happens
     // after service worker registration, we poll briefly on first load to let it
     // settle before we send the preferences request with the wrong id.
+    // Resolved id is cached here once resolveDeviceId() completes so that
+    // the synchronous deviceId() always returns a non-empty value after boot.
+    let _resolvedDeviceId = null;
+
     async function resolveDeviceId() {
+        if (_resolvedDeviceId) return _resolvedDeviceId;
+
         const existing = localStorage.getItem(STORAGE);
 
         // If we already have a value that looks like a push endpoint, use it.
-        if (existing && existing.startsWith('https://')) return existing;
+        if (existing && existing.startsWith('https://')) {
+            _resolvedDeviceId = existing;
+            return existing;
+        }
 
         // If push is supported, wait up to 2 s for push-notifications.js to
         // write the endpoint. Poll every 100 ms.
@@ -514,24 +523,33 @@ usort($countries, fn($a, $b) =>
             for (let i = 0; i < 20; i++) {
                 await new Promise(r => setTimeout(r, 100));
                 const settled = localStorage.getItem(STORAGE);
-                if (settled && settled.startsWith('https://')) return settled;
+                if (settled && settled.startsWith('https://')) {
+                    _resolvedDeviceId = settled;
+                    return settled;
+                }
             }
         }
 
         // No push subscription — fall back to existing UUID or create one.
-        if (existing) {
+        const id = existing
+            ?? (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2));
+
+        if (!existing) {
+            localStorage.setItem(STORAGE, id);
+            writeDeviceIdCookie(id);
+        } else {
             writeDeviceIdCookie(existing);
-            return existing;
         }
-        const id = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
-        localStorage.setItem(STORAGE, id);
-        writeDeviceIdCookie(id);
+
+        _resolvedDeviceId = id;
         return id;
     }
 
-    // Synchronous version for use after resolveDeviceId() has already run.
+    // Synchronous accessor — safe to call after loadPreferences() has run
+    // because resolveDeviceId() will have cached the value into _resolvedDeviceId.
+    // Falls back to localStorage so it still works if called before boot settles.
     function deviceId() {
-        return localStorage.getItem(STORAGE) ?? '';
+        return _resolvedDeviceId ?? localStorage.getItem(STORAGE) ?? '';
     }
 
     // ── Fetch helper ───────────────────────────────────────────────────────
@@ -1164,14 +1182,17 @@ usort($countries, fn($a, $b) =>
 
         // Preaching reminders toggle
         $('preachingRemindersToggle')?.addEventListener('change', async function () {
+            const checked = this.checked;
             try {
+                const id = await resolveDeviceId();
+                if (!id) throw new Error('Device ID not available');
                 await post('/app/preferences/preaching-reminders', {
-                    device_id: deviceId(),
-                    enabled:   this.checked,
+                    device_id: id,
+                    enabled:   checked,
                 });
-                window.showToast?.(this.checked ? 'Preaching reminders enabled' : 'Preaching reminders disabled');
+                window.showToast?.(checked ? 'Preaching reminders enabled' : 'Preaching reminders disabled');
             } catch (e) {
-                this.checked = !this.checked;   // revert on failure
+                this.checked = !checked;   // revert on failure
                 window.showToast?.('Could not update — try again', 'error');
             }
         });
