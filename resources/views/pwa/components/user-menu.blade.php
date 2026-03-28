@@ -245,7 +245,7 @@ usort($countries, fn($a, $b) =>
 
                     {{-- Number input --}}
                     <input type="tel" id="pref-phone" class="form-control form-control-sm"
-                           placeholder="794999139" autocomplete="tel-national"
+                           placeholder="820000000" autocomplete="tel-national"
                            style="border-radius:0 10px 10px 0; font-size:.85rem;">
 
                     {{-- Hidden input carries the resolved dial code for savePhone() --}}
@@ -419,7 +419,7 @@ usort($countries, fn($a, $b) =>
                     <i class="bi bi-book me-1 text-muted"></i>Preaching reminders
                 </div>
                 <div class="text-muted" style="font-size:.73rem">
-                    Notify me if I'm preaching this week
+                    Notify me if I'm preaching this weekend
                 </div>
             </div>
             <div class="form-check form-switch mb-0 ms-3">
@@ -970,7 +970,10 @@ usort($countries, fn($a, $b) =>
     async function savePhone() {
         const btn    = $('save-phone-btn');
         const errEl  = $('phone-error');
-        const local  = val('pref-phone').replace(/\D/g, '');
+        // Strip non-digits, then strip a leading zero — many countries write
+        // local numbers with a leading 0 (e.g. 0820000000) which must be
+        // dropped when prepending the international dial code (+27820000000).
+        const local  = val('pref-phone').replace(/\D/g, '').replace(/^0/, '');
 
         hide('phone-error');
 

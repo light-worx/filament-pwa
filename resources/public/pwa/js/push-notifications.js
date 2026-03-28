@@ -85,18 +85,17 @@
      * the browser retains a PushSubscription across page loads even if
      * the server DB was wiped or the row was deleted.
      */
-    async function isSubscribedOnServer(endpoint) {
+    async function getServerStatus(endpoint) {
         try {
             const res = await fetch('/app/push/status', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_TOKEN, 'Accept': 'application/json' },
                 body:    JSON.stringify({ endpoint }),
             });
-            if (!res.ok) return false;
-            const data = await res.json();
-            return !!data.subscribed;
+            if (!res.ok) return { subscribed: false, phone_verified: false };
+            return await res.json();
         } catch {
-            return false;
+            return { subscribed: false, phone_verified: false };
         }
     }
 
@@ -159,16 +158,24 @@
             }
         } catch {}
 
-        // Browser has a subscription — confirm server also has it
-        const serverHasIt = await isSubscribedOnServer(sub.endpoint);
+        // Check whether the server has this subscription AND whether the
+        // device has a verified phone number.
+        const serverStatus = await getServerStatus(sub.endpoint);
 
-        if (!serverHasIt) {
-            // Re-sync: save to server silently
-            try { await saveSubscriptionToServer(sub); } catch { /* non-fatal */ }
+        if (!serverStatus.subscribed) {
+            // Browser has a subscription but server doesn't.
+            // Only re-save if this device has a verified phone — otherwise the
+            // subscription was deliberately cleared or the user hasn't verified yet.
+            if (serverStatus.phone_verified) {
+                try { await saveSubscriptionToServer(sub); } catch { /* non-fatal */ }
+            }
+            // If no verified phone, leave the browser subscription in place
+            // (so the toggle can be enabled later once they verify) but don't
+            // persist it server-side yet.
         }
 
         return {
-            subscribed:  true,
+            subscribed:  serverStatus.subscribed,
             permission:  Notification.permission,
             supported:   true,
         };

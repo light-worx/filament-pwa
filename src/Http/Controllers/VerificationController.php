@@ -113,8 +113,13 @@ class VerificationController extends Controller
             ], 403);
         }
 
+        // Normalise to E.164: ensure no double leading digit after dial code.
+        // Handles the case where the client sends +270794999139 instead of +27794999139.
+        // Pattern: if after the + and country digits there's a 0, remove it.
+        $phone = preg_replace('/^(\+\d{1,3})0(\d)/', '$1$2', $data['phone']);
+
         $preference->update([
-            'phone'          => $data['phone'],
+            'phone'          => $phone,
             'phone_verified' => true,   // trusted because email is verified
         ]);
 

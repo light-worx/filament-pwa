@@ -49,9 +49,16 @@ class PushSubscriptionController extends Controller
             'endpoint' => 'required|string',
         ]);
 
-        $exists = PushSubscription::where('endpoint', $data['endpoint'])->exists();
+        $subscription = PushSubscription::where('endpoint', $data['endpoint'])
+            ->with('preference')
+            ->first();
 
-        return response()->json(['subscribed' => $exists]);
+        $phoneVerified = $subscription?->preference?->phone_verified ?? false;
+
+        return response()->json([
+            'subscribed'    => $subscription !== null,
+            'phone_verified' => (bool) $phoneVerified,
+        ]);
     }
 
     /**
