@@ -6,9 +6,7 @@ use Illuminate\Support\ServiceProvider;
 use Lightworx\FilamentPwa\Console\DownloadFlagsCommand;
 use Lightworx\FilamentPwa\Console\InstallFilamentPwaCommand;
 use Illuminate\Routing\Router;
-use Illuminate\Routing\Router;
 use Lightworx\FilamentPwa\FieldOptions\FieldOptionsRegistry;
-use Lightworx\FilamentPwa\Http\Middleware\PwaDeviceMiddleware;
 use Lightworx\FilamentPwa\Http\Middleware\PwaDeviceMiddleware;
 use Lightworx\FilamentPwa\Services\PushNotificationService;
 
