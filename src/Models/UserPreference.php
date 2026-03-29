@@ -16,6 +16,7 @@ class UserPreference extends Model
         'phone',
         'phone_verified',
         'custom_settings',
+        'preaching_reminders'
     ];
 
     protected $casts = [
