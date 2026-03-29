@@ -55,8 +55,8 @@ Route::prefix('app')->middleware('web')->group(function () {
 
 Route::get('/manifest.json', function () {
     return response()->json([
-        'name' => config('app.name'),
-        'short_name' => config('app.name'),
+        'name' => config('pwa.app_name'),
+        'short_name' => config('pwa.app_name'),
         'start_url' => config('pwa.app_route', '/'),
         'description' => config('pwa.description'),
         'display' => 'standalone',
