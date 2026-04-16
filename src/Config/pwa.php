@@ -10,6 +10,7 @@ return [
     'app_name'    => env('PWA_APP_NAME', env('APP_NAME', 'My App')),
     'app_short'   => env('PWA_APP_SHORT', 'App'),
     'description' => env('PWA_DESCRIPTION', 'A progressive web application'),
+    'app_route'   => env('PWA_APP_ROUTE', '/app'),
 
     /*
     |--------------------------------------------------------------------------
@@ -143,7 +144,7 @@ return [
     |
     | After a phone number is verified, the package looks up the user's name
     | from your app's own model. Configure the model class, the field that
-    | holds the phone number (must be stored in E.164: +27794999139), and
+    | holds the phone number (must be stored in E.164: +27820000000), and
     | the field (or dot-notation path) that holds the display name.
     |
     | not_found_message: shown in the user panel when the phone number is

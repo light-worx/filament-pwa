@@ -192,7 +192,7 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
                         <i class="bi bi-chevron-down ms-auto" style="font-size:.65rem;opacity:.5"></i>
                     </button>
                     <input type="tel" id="pref-phone" class="form-control form-control-sm"
-                           placeholder="794999139" autocomplete="tel-national"
+                           placeholder="820000000" autocomplete="tel-national"
                            style="border-radius:0 10px 10px 0; font-size:.85rem;">
                     <input type="hidden" id="phone-country" value="{{ $countries[0][1] ?? '+27' }}">
                 </div>
