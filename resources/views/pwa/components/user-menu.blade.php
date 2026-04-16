@@ -1,4 +1,8 @@
 @php
+/*
+ * Country list for the phone dial-code picker.
+ * Filtered/sorted per config('pwa.phone_countries') and phone_default_country.
+ */
 $allCountries = [
     ['ZA','+27','South Africa'],['US','+1','United States'],['GB','+44','United Kingdom'],
     ['AU','+61','Australia'],['NZ','+64','New Zealand'],['CA','+1','Canada'],
@@ -42,6 +46,9 @@ if (!empty($allowedCodes)) {
 usort($countries, fn($a, $b) =>
     ($b[0] === $defaultCountry) - ($a[0] === $defaultCountry) ?: strcmp($a[2], $b[2])
 );
+
+$unknownNumberMessage = config('pwa.identity.unknown_message',
+    'Your number is not yet linked to an account on this site.');
 @endphp
 
 <style>
@@ -71,6 +78,17 @@ usort($countries, fn($a, $b) =>
         font-size: .68rem; font-weight: 600;
         padding: 2px 7px; border-radius: 20px; white-space: nowrap;
     }
+    .phone-input-group .form-select { border-radius: 10px 0 0 10px; flex: 0 0 140px; }
+    .phone-input-group .form-control { border-radius: 0 10px 10px 0; border-left: none; }
+    .phone-input-group .form-control:focus { z-index: 3; }
+    .pin-input {
+        letter-spacing: .3em; font-size: 1.2rem; font-weight: 700;
+        text-align: center; width: 110px; flex-shrink: 0;
+    }
+    .section-label {
+        font-size: .68rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .07em; color: #9ca3af; margin-bottom: .6rem;
+    }
     /* Country picker */
     #country-picker-btn:focus { box-shadow: 0 0 0 2px rgba(59,130,246,.15); border-color: #3b82f6; outline: none; }
     #country-picker-btn:hover { background: #f9fafb; }
@@ -83,22 +101,15 @@ usort($countries, fn($a, $b) =>
     #country-list li button.active { background: #eff6ff; }
     #country-list li button .dial { color: #6b7280; font-size:.78rem;
                                     font-variant-numeric:tabular-nums; margin-left:auto; }
-    .pin-input {
-        letter-spacing: .3em; font-size: 1.2rem; font-weight: 700;
-        text-align: center; width: 110px; flex-shrink: 0;
-    }
-    .section-label {
-        font-size: .68rem; font-weight: 700; text-transform: uppercase;
-        letter-spacing: .07em; color: #9ca3af; margin-bottom: .6rem;
-    }
-    #pwa-prefs-status { min-height: 1rem; font-size: .8rem; }
-
+    /* Identity card */
+    .identity-name { font-size: 1rem; font-weight: 600; color: #111827; }
+    .identity-phone { font-size: .78rem; color: #6b7280; }
     /* Push card at bottom */
     .push-card {
         border-top: 1px solid #f1f5f9;
         background: #fff;
         border-radius: 0 !important;
-        margin: 0 -1rem -1rem;   /* bleed to panel edges */
+        margin: 0 -1rem -1rem;
         padding: 12px 16px;
     }
     .push-card .form-check-input { width: 2.5em; height: 1.25em; }
@@ -119,114 +130,52 @@ usort($countries, fn($a, $b) =>
         </button>
     </div>
 
-    {{-- ── Basic info ───────────────────────────────────────────────────── --}}
-    <div class="card shadow-sm border-0 mb-3">
+    {{-- ── Identity card (shown once verified) ────────────────────────── --}}
+    <div id="identity-card" class="card shadow-sm border-0 mb-3 d-none">
         <div class="card-body">
-            <div class="section-label">Basic info</div>
-
-            {{-- Name (required — gates the Verify button) --}}
-            <div class="mb-3">
-                <label class="form-label small text-muted" for="pref-name">
-                    Name <span class="text-danger">*</span>
-                </label>
-                <input type="text" id="pref-name"
-                       class="form-control form-control-sm"
-                       autocomplete="name"
-                       placeholder="Your name"
-                       required>
-                <div id="name-error" class="text-danger small mt-1 d-none">
-                    Please enter your name before verifying your email.
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div id="identity-name" class="identity-name mb-1"></div>
+                    <div id="identity-phone" class="identity-phone"></div>
+                    {{-- Shown when the number isn't matched to a site user --}}
+                    <div id="identity-unknown" class="d-none mt-2">
+                        <small class="text-warning">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            {{ $unknownNumberMessage }}
+                        </small>
+                    </div>
                 </div>
-            </div>
-
-            {{-- Email + verify --}}
-            <div class="mb-2">
-                <label class="form-label small text-muted d-flex justify-content-between align-items-center"
-                       for="pref-email">
-                    <span>Email</span>
-                    <span id="email-verified-badge"
-                          class="d-none verified-badge bg-success-subtle text-success">
-                        <i class="bi bi-check-circle-fill me-1"></i>Verified
-                    </span>
-                    <span id="email-unverified-badge"
-                          class="d-none verified-badge bg-warning-subtle text-warning">
-                        Unverified
-                    </span>
-                </label>
-                <div class="input-group input-group-sm">
-                    <input type="email" id="pref-email"
-                           class="form-control" autocomplete="email"
-                           placeholder="you@example.com">
-                    <button class="btn btn-outline-secondary btn-sm"
-                            id="send-pin-btn" type="button" disabled>
-                        Verify
-                    </button>
-                </div>
-                <div class="form-text d-none" id="pin-sent-hint">
-                    A 4-digit code has been sent — check your inbox.
-                </div>
-            </div>
-
-            {{-- PIN entry (hidden until code sent) --}}
-            <div id="pin-entry-row" class="d-none mb-3">
-                <label class="form-label small text-muted" for="pin-input">
-                    Enter the 4-digit code
-                </label>
-                <div class="d-flex gap-2 align-items-center">
-                    <input type="text" id="pin-input"
-                           inputmode="numeric" pattern="[0-9]{4}" maxlength="4"
-                           class="form-control form-control-sm pin-input"
-                           placeholder="0000" autocomplete="one-time-code">
-                    <button class="btn btn-primary btn-sm" id="verify-pin-btn" type="button">
-                        Confirm
-                    </button>
-                    <button class="btn btn-link btn-sm text-muted p-0"
-                            id="resend-pin-btn" type="button">
-                        Resend
-                    </button>
-                </div>
-                <div id="pin-error" class="text-danger small mt-1 d-none"></div>
-            </div>
-
-            {{-- Auto-saved — no button needed. Status shown as a toast. --}}
-            <div id="pwa-prefs-status" class="text-success small mt-1 d-none"></div>
-        </div>
-    </div>
-
-    {{-- ── Mobile number (gated: email must be verified) ───────────────── --}}
-    <div class="card shadow-sm border-0 mb-3">
-        <div class="card-body">
-            <div class="section-label d-flex justify-content-between align-items-center">
-                <span>Mobile number</span>
-                <span id="phone-verified-badge"
-                      class="d-none verified-badge bg-success-subtle text-success">
+                <span class="verified-badge bg-success-subtle text-success flex-shrink-0">
                     <i class="bi bi-check-circle-fill me-1"></i>Verified
                 </span>
             </div>
+            <button id="change-number-btn"
+                    class="btn btn-link btn-sm text-muted p-0 mt-2"
+                    style="font-size:.75rem">
+                <i class="bi bi-pencil me-1"></i>Change number
+            </button>
+        </div>
+    </div>
 
-            <div id="phone-locked" class="text-muted small py-1">
-                <i class="bi bi-lock me-1"></i>
-                Verify your email address first.
-            </div>
+    {{-- ── Phone verification (shown when NOT verified) ────────────────── --}}
+    <div id="verification-card" class="card shadow-sm border-0 mb-3">
+        <div class="card-body">
+            <div class="section-label">Verify your mobile number</div>
 
-            <div id="phone-unlocked" class="d-none">
-                {{-- Encode country list as JSON for the JS custom dropdown --}}
-                @php
-                    $countriesJson = json_encode(
-                        array_values(array_map(
-                            fn($c) => ['iso' => $c[0], 'dial' => $c[1], 'name' => $c[2]],
-                            $countries
-                        )),
-                        JSON_HEX_TAG | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                    );
-                @endphp
+            {{-- Country picker + number input --}}
+            @php
+                $countriesJson = json_encode(
+                    array_values(array_map(
+                        fn($c) => ['iso' => $c[0], 'dial' => $c[1], 'name' => $c[2]],
+                        $countries
+                    )),
+                    JSON_HEX_TAG | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                );
+            @endphp
 
-                <label class="form-label small text-muted">Number</label>
-
-                {{-- Custom country-code picker + number input --}}
-                <div class="d-flex gap-0 mb-2" id="phone-input-row">
-
-                    {{-- Trigger button (shows selected flag + dial code) --}}
+            <div id="phone-entry-section">
+                <label class="form-label small text-muted">Mobile number</label>
+                <div class="d-flex gap-0 mb-2">
                     <button type="button" id="country-picker-btn"
                             class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 flex-shrink-0"
                             style="border-radius:10px 0 0 10px; border-right:none;
@@ -242,26 +191,19 @@ usort($countries, fn($a, $b) =>
                         <span id="country-dial-label" style="font-variant-numeric:tabular-nums"></span>
                         <i class="bi bi-chevron-down ms-auto" style="font-size:.65rem;opacity:.5"></i>
                     </button>
-
-                    {{-- Number input --}}
                     <input type="tel" id="pref-phone" class="form-control form-control-sm"
-                           placeholder="820000000" autocomplete="tel-national"
+                           placeholder="794999139" autocomplete="tel-national"
                            style="border-radius:0 10px 10px 0; font-size:.85rem;">
-
-                    {{-- Hidden input carries the resolved dial code for savePhone() --}}
                     <input type="hidden" id="phone-country" value="{{ $countries[0][1] ?? '+27' }}">
                 </div>
 
-                {{-- Dropdown panel --}}
-                <div id="country-picker-dropdown"
-                     class="d-none"
+                {{-- Country picker dropdown --}}
+                <div id="country-picker-dropdown" class="d-none"
                      style="position:absolute; z-index:1200; width:calc(100% - 2rem);
                             max-height:260px; overflow:hidden; display:flex;
                             flex-direction:column; background:#fff;
                             border:1px solid #e5e7eb; border-radius:12px;
                             box-shadow:0 8px 24px rgba(0,0,0,.12);">
-
-                    {{-- Search within dropdown --}}
                     <div class="p-2 border-bottom">
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white border-end-0">
@@ -269,38 +211,58 @@ usort($countries, fn($a, $b) =>
                             </span>
                             <input type="text" id="country-search"
                                    class="form-control border-start-0 ps-0"
-                                   placeholder="Search country…"
-                                   autocomplete="off"
+                                   placeholder="Search country…" autocomplete="off"
                                    style="border-radius:0 8px 8px 0; font-size:.83rem;">
                         </div>
                     </div>
-
-                    {{-- Scrollable list --}}
                     <ul id="country-list" role="listbox"
-                        style="overflow-y:auto; flex:1; list-style:none;
-                               margin:0; padding:4px 0;">
+                        style="overflow-y:auto; flex:1; list-style:none; margin:0; padding:4px 0;">
                     </ul>
                 </div>
 
-                {{-- Pass country data to JS --}}
                 <script id="pwa-countries-data" type="application/json">{!! $countriesJson !!}</script>
 
-                <button id="save-phone-btn"
-                        class="btn btn-outline-primary btn-sm w-100">
-                    Save number
+                <button id="send-sms-pin-btn" class="btn btn-primary btn-sm w-100">
+                    Send verification code
                 </button>
                 <div id="phone-error" class="text-danger small mt-1 d-none"></div>
+            </div>
+
+            {{-- PIN entry (shown after SMS sent) --}}
+            <div id="pin-entry-section" class="d-none">
+                <div class="text-muted small mb-2" id="pin-sent-hint"></div>
+                <label class="form-label small text-muted" for="pin-input">
+                    Enter the 4-digit code
+                </label>
+                <div class="d-flex gap-2 align-items-center mb-1">
+                    <input type="text" id="pin-input"
+                           inputmode="numeric" pattern="[0-9]{4}" maxlength="4"
+                           class="form-control form-control-sm pin-input"
+                           placeholder="0000" autocomplete="one-time-code">
+                    <button class="btn btn-primary btn-sm" id="verify-pin-btn" type="button">
+                        Confirm
+                    </button>
+                </div>
+                <div class="d-flex gap-3">
+                    <button class="btn btn-link btn-sm text-muted p-0" id="resend-pin-btn" type="button">
+                        Resend code
+                    </button>
+                    <button class="btn btn-link btn-sm text-muted p-0" id="change-phone-btn" type="button">
+                        Change number
+                    </button>
+                </div>
+                <div id="pin-error" class="text-danger small mt-1 d-none"></div>
             </div>
         </div>
     </div>
 
-    {{-- Config-driven custom fields --}}
+    {{-- ── Custom fields (gated: phone must be verified) ───────────────── --}}
     @php
         $customFields = config('pwa.user_fields', []);
         $registry     = app(\Lightworx\FilamentPwa\FieldOptions\FieldOptionsRegistry::class);
     @endphp
     @if(!empty($customFields))
-    <div class="card shadow-sm border-0 mb-3">
+    <div id="custom-fields-card" class="card shadow-sm border-0 mb-3 d-none">
         <div class="card-body">
             <div class="section-label">Additional settings</div>
             @foreach($customFields as $field)
@@ -311,63 +273,40 @@ usort($countries, fn($a, $b) =>
                     $isDynamic    = $fOptions === 'dynamic';
                     $isSearchable = $isDynamic && !empty($field['searchable']);
                     $placeholder  = $field['placeholder'] ?? '— select —';
-
-                    // For non-searchable dynamic fields, resolve now so options
-                    // are embedded in the HTML — no AJAX request needed.
                     $resolvedOptions = ($isDynamic && !$isSearchable && $registry->has($fKey))
                         ? $registry->resolve($fKey)
                         : [];
                 @endphp
                 <div class="mb-3">
-                    <label class="form-label small text-muted"
-                           for="pref-custom-{{ $fKey }}">
+                    <label class="form-label small text-muted" for="pref-custom-{{ $fKey }}">
                         {{ $field['label'] }}
                     </label>
 
                     @if($fType === 'select' && $isSearchable)
-                        {{--
-                            AJAX / searchable select.
-                            Rendered as a text input + hidden value + results list.
-                            JS fetches /app/field-options/{key}?search=… on input.
-                        --}}
                         <div class="pwa-searchable-select"
                              data-field-key="{{ $fKey }}"
                              data-options-url="{{ url('/app/field-options/' . $fKey) }}"
                              data-placeholder="{{ $placeholder }}">
                             <div class="input-group input-group-sm">
-                                <input type="text"
-                                       class="form-control pwa-search-input"
-                                       placeholder="{{ $placeholder }}"
-                                       autocomplete="off"
+                                <input type="text" class="form-control pwa-search-input"
+                                       placeholder="{{ $placeholder }}" autocomplete="off"
                                        aria-label="{{ $field['label'] }}">
                                 <span class="input-group-text text-muted" style="cursor:default">
                                     <i class="bi bi-search" style="font-size:.75rem"></i>
                                 </span>
                             </div>
-                            {{-- Hidden input carries the actual saved value --}}
-                            <input type="hidden"
-                                   id="pref-custom-{{ $fKey }}"
-                                   data-custom-key="{{ $fKey }}">
+                            <input type="hidden" id="pref-custom-{{ $fKey }}" data-custom-key="{{ $fKey }}">
                             <div class="pwa-search-results list-group mt-1 d-none"
                                  style="max-height:180px;overflow-y:auto;font-size:.85rem;
                                         border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.1)">
                             </div>
-                            <div class="pwa-search-selected text-muted d-none"
-                                 style="font-size:.78rem;margin-top:4px">
-                                {{-- Shows the label of the currently selected value --}}
-                            </div>
+                            <div class="pwa-search-selected text-muted d-none" style="font-size:.78rem;margin-top:4px"></div>
                         </div>
 
                     @elseif($fType === 'select')
-                        {{--
-                            Standard select — options are either a static array
-                            from config or a dynamic resolver called at render time.
-                        --}}
-                        <select id="pref-custom-{{ $fKey }}"
-                                class="form-select form-select-sm"
+                        <select id="pref-custom-{{ $fKey }}" class="form-select form-select-sm"
                                 data-custom-key="{{ $fKey }}">
                             <option value="">{{ $placeholder }}</option>
-
                             @if($isDynamic)
                                 @foreach($resolvedOptions as $opt)
                                     <option value="{{ $opt['value'] }}">{{ $opt['label'] }}</option>
@@ -378,29 +317,23 @@ usort($countries, fn($a, $b) =>
                                 @endforeach
                             @endif
                         </select>
-
                         @if($isDynamic && !$registry->has($fKey))
                             <div class="text-warning small mt-1">
                                 <i class="bi bi-exclamation-triangle me-1"></i>
                                 No resolver registered for <code>{{ $fKey }}</code>.
-                                Call <code>PwaFieldOptions::register('{{ $fKey }}', ...)</code>
-                                in your AppServiceProvider.
                             </div>
                         @endif
 
                     @elseif($fType === 'toggle')
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" role="switch"
-                                   id="pref-custom-{{ $fKey }}"
-                                   data-custom-key="{{ $fKey }}">
+                                   id="pref-custom-{{ $fKey }}" data-custom-key="{{ $fKey }}">
                         </div>
 
                     @else
-                        <input type="{{ $fType }}"
-                               id="pref-custom-{{ $fKey }}"
+                        <input type="{{ $fType }}" id="pref-custom-{{ $fKey }}"
                                class="form-control form-control-sm"
-                               placeholder="{{ $placeholder }}"
-                               data-custom-key="{{ $fKey }}">
+                               placeholder="{{ $placeholder }}" data-custom-key="{{ $fKey }}">
                     @endif
                 </div>
             @endforeach
@@ -411,8 +344,8 @@ usort($countries, fn($a, $b) =>
     @stack('pwa-user-fields')
     @stack('pwa-user-settings')
 
-    {{-- ── Preaching reminders opt-in ────────────────────────────────────── --}}
-    <div class="card shadow-sm border-0 mb-3">
+    {{-- ── Preaching reminders (gated: phone must be verified) ─────────── --}}
+    <div id="preaching-card" class="card shadow-sm border-0 mb-3 d-none">
         <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
             <div>
                 <div class="small fw-semibold">
@@ -429,7 +362,7 @@ usort($countries, fn($a, $b) =>
         </div>
     </div>
 
-    {{-- ── Inbox link ──────────────────────────────────────────────────── --}}
+    {{-- ── Inbox link ───────────────────────────────────────────────────── --}}
     <a href="/app/messages" class="card shadow-sm border-0 mb-3 text-decoration-none"
        style="display:block; border-radius:14px;">
         <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
@@ -442,9 +375,7 @@ usort($countries, fn($a, $b) =>
             </div>
             <div class="flex-grow-1">
                 <div class="small fw-semibold text-dark">Messages</div>
-                <div class="text-muted" style="font-size:.73rem" id="um-msg-summary">
-                    Loading…
-                </div>
+                <div class="text-muted" style="font-size:.73rem" id="um-msg-summary">Loading…</div>
             </div>
             <i class="bi bi-chevron-right text-muted" style="font-size:.75rem"></i>
         </div>
@@ -452,15 +383,13 @@ usort($countries, fn($a, $b) =>
 
     {{-- ── Push notifications — pinned to bottom ───────────────────────── --}}
     @if(config('pwa.push.enabled', true))
-    <div class="mt-auto push-card">
+    <div id="push-card" class="mt-auto push-card d-none">
         <div class="d-flex justify-content-between align-items-center">
             <div>
                 <div class="small fw-semibold">
                     <i class="bi bi-bell me-1 text-muted"></i>Push notifications
                 </div>
-                <div class="text-muted" style="font-size:.73rem" id="push-status-label">
-                    Checking…
-                </div>
+                <div class="text-muted" style="font-size:.73rem" id="push-status-label">Checking…</div>
             </div>
             <div class="form-check form-switch mb-0 ms-3">
                 <input class="form-check-input" type="checkbox" role="switch"
@@ -485,7 +414,7 @@ usort($countries, fn($a, $b) =>
     const CSRF    = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
     const STORAGE = 'pwa_device_id';
 
-    // Mirror device_id into a cookie so PHP middleware can read it server-side
+    // ── Cookie helper ──────────────────────────────────────────────────────
     function writeDeviceIdCookie(id) {
         try {
             document.cookie = `pwa_device_id=${encodeURIComponent(id)}; max-age=${60*60*24*365}; path=/; SameSite=Lax`;
@@ -493,32 +422,17 @@ usort($countries, fn($a, $b) =>
     }
 
     // ── Device ID ──────────────────────────────────────────────────────────
-    // Returns a stable device identifier.
-    // Priority: push subscription endpoint (written by push-notifications.js)
-    //           → existing localStorage value
-    //           → new random UUID (non-push devices)
-    //
-    // When a push subscription exists, push-notifications.js writes the endpoint
-    // to localStorage during checkStatus(). Because that call is async and happens
-    // after service worker registration, we poll briefly on first load to let it
-    // settle before we send the preferences request with the wrong id.
-    // Resolved id is cached here once resolveDeviceId() completes so that
-    // the synchronous deviceId() always returns a non-empty value after boot.
     let _resolvedDeviceId = null;
 
     async function resolveDeviceId() {
         if (_resolvedDeviceId) return _resolvedDeviceId;
 
         const existing = localStorage.getItem(STORAGE);
-
-        // If we already have a value that looks like a push endpoint, use it.
         if (existing && existing.startsWith('https://')) {
             _resolvedDeviceId = existing;
             return existing;
         }
 
-        // If push is supported, wait up to 2 s for push-notifications.js to
-        // write the endpoint. Poll every 100 ms.
         if ('serviceWorker' in navigator && 'PushManager' in window) {
             for (let i = 0; i < 20; i++) {
                 await new Promise(r => setTimeout(r, 100));
@@ -530,24 +444,17 @@ usort($countries, fn($a, $b) =>
             }
         }
 
-        // No push subscription — fall back to existing UUID or create one.
-        const id = existing
-            ?? (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2));
-
+        const id = existing ?? (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2));
         if (!existing) {
             localStorage.setItem(STORAGE, id);
             writeDeviceIdCookie(id);
         } else {
             writeDeviceIdCookie(existing);
         }
-
         _resolvedDeviceId = id;
         return id;
     }
 
-    // Synchronous accessor — safe to call after loadPreferences() has run
-    // because resolveDeviceId() will have cached the value into _resolvedDeviceId.
-    // Falls back to localStorage so it still works if called before boot settles.
     function deviceId() {
         return _resolvedDeviceId ?? localStorage.getItem(STORAGE) ?? '';
     }
@@ -555,7 +462,7 @@ usort($countries, fn($a, $b) =>
     // ── Fetch helper ───────────────────────────────────────────────────────
     async function post(url, body) {
         const res = await fetch(url, {
-            method:  'POST',
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': CSRF,
@@ -568,268 +475,123 @@ usort($countries, fn($a, $b) =>
         return data;
     }
 
-    // ── Local state ────────────────────────────────────────────────────────
-    let state = {
-        emailVerified: false,
-        phoneVerified: false,
-        verifiedEmail: '',   // the email address that was verified
-    };
-
     // ── DOM helpers ────────────────────────────────────────────────────────
-    const $  = id => document.getElementById(id);
+    const $    = id => document.getElementById(id);
     const show = id => $(id)?.classList.remove('d-none');
     const hide = id => $(id)?.classList.add('d-none');
     const val  = id => $(id)?.value?.trim() ?? '';
     const setV = (id, v) => { const el = $(id); if (el) el.value = v ?? ''; };
 
-    // ── Sync UI to state ───────────────────────────────────────────────────
+    // ── State ──────────────────────────────────────────────────────────────
+    let state = { phoneVerified: false };
+
+    // ── Apply state to UI ──────────────────────────────────────────────────
     function applyState() {
-        const emailVal = val('pref-email');
-
-        // Email badges
-        if (state.emailVerified && emailVal === state.verifiedEmail) {
-            show('email-verified-badge');
-            hide('email-unverified-badge');
-        } else if (emailVal) {
-            hide('email-verified-badge');
-            show('email-unverified-badge');
-            // If email has changed since verification, clear local verified state
-            if (state.emailVerified && emailVal !== state.verifiedEmail) {
-                state.emailVerified = false;
-                state.phoneVerified = false;
-            }
+        if (state.phoneVerified) {
+            show('identity-card');
+            hide('verification-card');
+            // Show gated sections
+            @if(!empty($customFields)) show('custom-fields-card'); @endif
+            show('preaching-card');
+            show('push-card');
         } else {
-            hide('email-verified-badge');
-            hide('email-unverified-badge');
+            hide('identity-card');
+            show('verification-card');
+            @if(!empty($customFields)) hide('custom-fields-card'); @endif
+            hide('preaching-card');
+            hide('push-card');
+            // Always show phone entry (not PIN) unless mid-flow
+            show('phone-entry-section');
+            hide('pin-entry-section');
         }
-
-        // Phone section gate
-        if (state.emailVerified) {
-            hide('phone-locked');
-            show('phone-unlocked');
-        } else {
-            show('phone-locked');
-            hide('phone-unlocked');
-        }
-
-        // Phone verified badge
-        state.phoneVerified ? show('phone-verified-badge') : hide('phone-verified-badge');
-
-        // Verify button — requires name to be filled
-        updateVerifyButton();
-
-        // Push toggle
         refreshPushToggle();
-    }
-
-    // ── Verify button gating (requires name) ──────────────────────────────
-    function updateVerifyButton() {
-        const btn          = $('send-pin-btn');
-        const hasName      = val('pref-name').length > 0;
-        const hasEmail     = val('pref-email').length > 0;
-        const alreadyVerif = state.emailVerified && val('pref-email') === state.verifiedEmail;
-
-        if (btn) {
-            btn.disabled = !hasName || !hasEmail || alreadyVerif;
-        }
-    }
-
-    // ── Push toggle ────────────────────────────────────────────────────────
-    async function refreshPushToggle() {
-        const toggle    = $('pushToggle');
-        const statusLbl = $('push-status-label');
-        if (!toggle) return;
-
-        if (!state.phoneVerified) {
-            toggle.checked  = false;
-            toggle.disabled = true;
-            if (statusLbl) statusLbl.textContent = 'Requires verified mobile number';
-            show('push-phone-required');
-            return;
-        }
-
-        hide('push-phone-required');
-
-        if (!window.pushNotifications) {
-            if (statusLbl) statusLbl.textContent = 'Not available';
-            return;
-        }
-
-        const status = await window.pushNotifications.checkStatus();
-
-        if (status.permission === 'denied') {
-            if (statusLbl) statusLbl.textContent = 'Blocked — reset in browser settings';
-            toggle.disabled = true;
-            return;
-        }
-
-        toggle.disabled = false;
-        toggle.checked  = status.subscribed;
-        if (statusLbl) statusLbl.textContent = status.subscribed ? 'Enabled' : 'Disabled';
     }
 
     // ── Load preferences ───────────────────────────────────────────────────
     async function loadPreferences() {
         try {
-            // resolveDeviceId() waits for push-notifications.js to write the
-            // push endpoint into localStorage before we fire the request.
             const id  = await resolveDeviceId();
-            const res = await fetch(
-                '/app/preferences?device_id=' + encodeURIComponent(id),
-                { headers: { 'Accept': 'application/json' } }
-            );
+            const res = await fetch('/app/preferences?device_id=' + encodeURIComponent(id), {
+                headers: { 'Accept': 'application/json' }
+            });
             if (!res.ok) return;
             const data = await res.json();
 
-            setV('pref-name',  data.name);
-            setV('pref-email', data.email);
-
-            // Restore phone — strip the dial code prefix so only the local
-            // number shows in the input. The custom picker already holds the dial code.
-            if (data.phone) {
-                const dialCode = $('phone-country')?.value ?? '';
-                const local    = dialCode && data.phone.startsWith(dialCode)
-                    ? data.phone.slice(dialCode.length)
-                    : data.phone.replace(/^\+[0-9]{1,3}/, '');
-                setV('pref-phone', local);
-            }
-
-            // Custom fields — standard inputs and plain selects
-            const custom = data.custom_settings ?? {};
-            document.querySelectorAll('[data-custom-key]').forEach(el => {
-                const v = custom[el.dataset.customKey];
-                if (el.type === 'hidden' && el.closest('.pwa-searchable-select')) {
-                    // Searchable select — restore saved value + fetch its label
-                    if (v) {
-                        el.value = v;
-                        restoreSearchableLabel(el.closest('.pwa-searchable-select'), v);
-                    }
-                } else if (el.type === 'checkbox') {
-                    el.checked = !!v;
-                } else {
-                    el.value = v ?? '';
-                }
-            });
-
-            state.emailVerified = !!data.email_verified;
             state.phoneVerified = !!data.phone_verified;
-            state.verifiedEmail = data.email_verified ? (data.email ?? '') : '';
 
-            // Restore preaching reminders toggle
-            const prToggle = $('preachingRemindersToggle');
-            if (prToggle) prToggle.checked = !!data.preaching_reminders;
+            if (state.phoneVerified) {
+                // Identity card
+                const nameEl  = $('identity-name');
+                const phoneEl = $('identity-phone');
+
+                if (nameEl) {
+                    nameEl.textContent = data.resolved_name || '';
+                }
+                if (phoneEl) {
+                    phoneEl.textContent = data.phone ?? '';
+                }
+
+                // Show unknown-number message if no name resolved
+                if (!data.resolved_name) {
+                    show('identity-unknown');
+                } else {
+                    hide('identity-unknown');
+                }
+
+                // Restore preaching toggle
+                const prToggle = $('preachingRemindersToggle');
+                if (prToggle) prToggle.checked = !!data.preaching_reminders;
+
+                // Restore custom fields
+                const custom = data.custom_settings ?? {};
+                document.querySelectorAll('[data-custom-key]').forEach(el => {
+                    const v = custom[el.dataset.customKey];
+                    if (el.type === 'hidden' && el.closest('.pwa-searchable-select')) {
+                        if (v) {
+                            el.value = v;
+                            restoreSearchableLabel(el.closest('.pwa-searchable-select'), v);
+                        }
+                    } else if (el.type === 'checkbox') {
+                        el.checked = !!v;
+                    } else if (!el.classList.contains('pwa-search-input')) {
+                        el.value = v ?? '';
+                    }
+                });
+            }
 
             applyState();
         } catch (e) {
             console.warn('PWA: could not load preferences', e);
+            applyState();
         }
     }
 
-    // ── Auto-save preferences ──────────────────────────────────────────────
-    // Triggered on blur / change with a short debounce. No save button needed.
+    // ── Auto-save custom settings ──────────────────────────────────────────
     let autoSaveTimer = null;
 
-    async function savePreferences({ silent = false } = {}) {
-        // Name is required before anything can be saved
-        if (!val('pref-name')) {
-            show('name-error');
-            return;
-        }
-        hide('name-error');
+    async function saveCustomSettings({ silent = false } = {}) {
+        if (!state.phoneVerified) return;
 
         const custom = {};
         document.querySelectorAll('[data-custom-key]').forEach(el => {
-            // Skip the search text input — only the hidden value input matters
             if (el.classList.contains('pwa-search-input')) return;
             custom[el.dataset.customKey] = el.type === 'checkbox' ? el.checked : el.value;
         });
 
         try {
-            const data = await post('/app/preferences', {
+            await post('/app/preferences', {
                 device_id:       deviceId(),
-                name:            val('pref-name'),
-                email:           val('pref-email'),
                 custom_settings: custom,
             });
-            state.emailVerified = !!data.email_verified;
-            state.phoneVerified = !!data.phone_verified;
-            applyState();
             if (!silent) window.showToast?.('Saved');
-        } catch (e) {
+        } catch {
             window.showToast?.('Could not save — try again', 'error');
         }
     }
 
     function scheduleAutoSave() {
         clearTimeout(autoSaveTimer);
-        autoSaveTimer = setTimeout(() => savePreferences(), 800);
-    }
-
-    // ── Send PIN ───────────────────────────────────────────────────────────
-    async function sendPin() {
-        // Guard: name required
-        if (!val('pref-name')) {
-            show('name-error');
-            $('pref-name')?.focus();
-            return;
-        }
-        hide('name-error');
-
-        const btn   = $('send-pin-btn');
-        const email = val('pref-email');
-        if (!email) return;
-
-        btn.disabled    = true;
-        btn.textContent = '…';
-
-        try {
-            await post('/app/verify/send-pin', { device_id: deviceId(), email });
-            show('pin-entry-row');
-            show('pin-sent-hint');
-            hide('pin-error');
-            $('pin-input')?.focus();
-            window.showToast?.('Code sent — check your inbox');
-        } catch (e) {
-            window.showToast?.(e.message || 'Could not send code', 'error');
-        } finally {
-            btn.disabled    = false;
-            btn.textContent = 'Verify';
-        }
-    }
-
-    // ── Verify PIN ─────────────────────────────────────────────────────────
-    async function verifyPin() {
-        const btn   = $('verify-pin-btn');
-        const pin   = val('pin-input');
-        const errEl = $('pin-error');
-
-        if (pin.replace(/\D/g,'').length !== 4) {
-            errEl.textContent = 'Enter the 4-digit code.';
-            show('pin-error');
-            return;
-        }
-
-        btn.disabled = true;
-        hide('pin-error');
-
-        try {
-            await post('/app/verify/confirm-pin', { device_id: deviceId(), pin });
-
-            state.emailVerified = true;
-            state.verifiedEmail = val('pref-email');
-
-            hide('pin-entry-row');
-            hide('pin-sent-hint');
-            setV('pin-input', '');
-            applyState();
-            window.showToast?.('Email verified ✓');
-        } catch (e) {
-            errEl.textContent = e.message || 'Incorrect code.';
-            show('pin-error');
-            $('pin-input')?.select();
-        } finally {
-            btn.disabled = false;
-        }
+        autoSaveTimer = setTimeout(() => saveCustomSettings(), 800);
     }
 
     // ── Country picker ─────────────────────────────────────────────────────
@@ -838,81 +600,61 @@ usort($countries, fn($a, $b) =>
         if (!dataEl) return;
 
         const countries   = JSON.parse(dataEl.textContent);
-        const btnEl       = document.getElementById('country-picker-btn');
-        const dropdown    = document.getElementById('country-picker-dropdown');
-        const listEl      = document.getElementById('country-list');
-        const searchEl    = document.getElementById('country-search');
-        const flagImg     = document.getElementById('country-flag-img');
-        const flagFb      = document.getElementById('country-flag-fb');  // fallback text
-        const dialLabel   = document.getElementById('country-dial-label');
-        const hiddenInput = document.getElementById('phone-country');
+        const btnEl       = $('country-picker-btn');
+        const dropdown    = $('country-picker-dropdown');
+        const listEl      = $('country-list');
+        const searchEl    = $('country-search');
+        const flagImg     = $('country-flag-img');
+        const flagFb      = $('country-flag-fb');
+        const dialLabel   = $('country-dial-label');
+        const hiddenInput = $('phone-country');
 
         if (!btnEl || !dropdown || !listEl) return;
 
-        // ── Flag helpers ──────────────────────────────────────────────────
-        // Base path comes from <meta name="flags-path"> set in app.blade.php.
-        // Falls back to /pwa/flags if the meta tag is absent.
         const FLAGS_BASE = (
-            document.querySelector('meta[name="flags-path"]')?.content
-            ?? '/pwa/flags'
-        ).replace(/\/$/, '');  // strip trailing slash
+            document.querySelector('meta[name="flags-path"]')?.content ?? '/pwa/flags'
+        ).replace(/\/$/, '');
 
-        function flagUrl(iso) {
-            return FLAGS_BASE + '/' + iso.toLowerCase() + '.png';
-        }
+        function flagUrl(iso) { return FLAGS_BASE + '/' + iso.toLowerCase() + '.png'; }
 
-        // ── Select a country ──────────────────────────────────────────────
         function selectCountry(country) {
-            // Update trigger button
-            flagImg.src          = flagUrl(country.iso);
-            flagImg.alt          = country.name;
+            flagImg.src           = flagUrl(country.iso);
+            flagImg.alt           = country.name;
             flagImg.style.display = 'inline';
-            flagFb.textContent   = country.iso;   // shown if image fails
-            flagFb.style.display = 'none';
+            flagFb.textContent    = country.iso;
+            flagFb.style.display  = 'none';
             dialLabel.textContent = country.dial;
-
-            // Update hidden input (read by savePhone)
-            hiddenInput.value = country.dial;
-
-            // Aria
+            hiddenInput.value     = country.dial;
             btnEl.setAttribute('aria-expanded', 'false');
             closeDropdown();
         }
 
-        // ── Render list ───────────────────────────────────────────────────
         function renderList(filter) {
-            const q    = (filter || '').toLowerCase();
+            const q     = (filter || '').toLowerCase();
             const items = q
                 ? countries.filter(c =>
                     c.name.toLowerCase().includes(q) ||
                     c.iso.toLowerCase().includes(q)  ||
-                    c.dial.includes(q)
-                  )
+                    c.dial.includes(q))
                 : countries;
 
             listEl.innerHTML = '';
-
             if (!items.length) {
-                listEl.innerHTML =
-                    '<li><div class="text-muted small px-3 py-2">No results</div></li>';
+                listEl.innerHTML = '<li><div class="text-muted small px-3 py-2">No results</div></li>';
                 return;
             }
-
             items.forEach(c => {
                 const li  = document.createElement('li');
                 const btn = document.createElement('button');
                 btn.type  = 'button';
                 btn.setAttribute('role', 'option');
-                btn.setAttribute('data-iso', c.iso);
 
-                // Flag image
                 const img = document.createElement('img');
                 img.src    = flagUrl(c.iso);
                 img.alt    = c.name;
-                img.width  = 20;
-                img.height = 14;
+                img.width  = 20; img.height = 14;
                 img.style.cssText = 'border-radius:2px;object-fit:cover;flex-shrink:0';
-                img.onerror = function() {
+                img.onerror = function () {
                     this.style.display = 'none';
                     const fb = document.createElement('span');
                     fb.textContent  = c.iso;
@@ -920,11 +662,8 @@ usort($countries, fn($a, $b) =>
                     btn.insertBefore(fb, btn.firstChild);
                 };
 
-                // Name
                 const name = document.createElement('span');
                 name.textContent = c.name;
-
-                // Dial code (right-aligned)
                 const dial = document.createElement('span');
                 dial.className   = 'dial';
                 dial.textContent = c.dial;
@@ -933,16 +672,13 @@ usort($countries, fn($a, $b) =>
                 btn.appendChild(name);
                 btn.appendChild(dial);
                 btn.addEventListener('click', () => selectCountry(c));
-
-                // Highlight currently selected
-                if (c.dial === hiddenInput.value) btn.classList.add('active');
+                if (c.dial === hiddenInput?.value) btn.classList.add('active');
 
                 li.appendChild(btn);
                 listEl.appendChild(li);
             });
         }
 
-        // ── Open / close ──────────────────────────────────────────────────
         function openDropdown() {
             renderList('');
             dropdown.style.display = 'flex';
@@ -959,44 +695,29 @@ usort($countries, fn($a, $b) =>
         }
 
         btnEl.addEventListener('click', () => {
-            const isOpen = btnEl.getAttribute('aria-expanded') === 'true';
-            isOpen ? closeDropdown() : openDropdown();
+            btnEl.getAttribute('aria-expanded') === 'true' ? closeDropdown() : openDropdown();
         });
-
-        // Close on outside click
         document.addEventListener('click', e => {
-            if (!btnEl.contains(e.target) && !dropdown.contains(e.target)) {
-                closeDropdown();
-            }
+            if (!btnEl.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
         });
-
-        // Close on Escape
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') closeDropdown();
-        });
-
-        // Filter on search input
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDropdown(); });
         searchEl?.addEventListener('input', () => renderList(searchEl.value));
 
-        // ── Initialise with default country ───────────────────────────────
-        const defaultIso  = '{{ $defaultCountry }}';
-        const defaultC    = countries.find(c => c.iso === defaultIso) || countries[0];
+        const defaultIso = '{{ $defaultCountry }}';
+        const defaultC   = countries.find(c => c.iso === defaultIso) || countries[0];
         if (defaultC) selectCountry(defaultC);
     })();
 
-    // ── Save phone ─────────────────────────────────────────────────────────
-    async function savePhone() {
-        const btn    = $('save-phone-btn');
-        const errEl  = $('phone-error');
-        // Strip non-digits, then strip a leading zero — many countries write
-        // local numbers with a leading 0 (e.g. 0820000000) which must be
-        // dropped when prepending the international dial code (+27820000000).
-        const local  = val('pref-phone').replace(/\D/g, '').replace(/^0/, '');
+    // ── SMS verification flow ──────────────────────────────────────────────
+    async function sendSmsPin() {
+        const btn     = $('send-sms-pin-btn');
+        const errEl   = $('phone-error');
+        const local   = val('pref-phone').replace(/\D/g, '').replace(/^0/, '');
 
         hide('phone-error');
 
         if (!local) {
-            errEl.textContent = 'Enter a phone number.';
+            errEl.textContent = 'Please enter your mobile number.';
             show('phone-error');
             return;
         }
@@ -1004,88 +725,137 @@ usort($countries, fn($a, $b) =>
         const dialCode = $('phone-country')?.value ?? '+27';
         const e164     = dialCode + local;
 
-        btn.disabled = true;
+        btn.disabled    = true;
+        btn.textContent = 'Sending…';
 
         try {
-            await post('/app/verify/phone', { device_id: deviceId(), phone: e164 });
-            state.phoneVerified = true;
-            applyState();
-            window.showToast?.('Mobile number saved');
+            const id = await resolveDeviceId();
+            await post('/app/verify/send-pin', { device_id: id, phone: e164 });
+
+            // Switch to PIN entry view
+            hide('phone-entry-section');
+            show('pin-entry-section');
+            const hint = $('pin-sent-hint');
+            if (hint) hint.textContent = `Code sent to ${e164}. Check your messages.`;
+            $('pin-input')?.focus();
         } catch (e) {
-            errEl.textContent = e.message || 'Could not save number.';
+            // 403 = number not found in identity model (require_known_number=true)
+            // Show the server's message verbatim — it's already user-friendly
+            errEl.textContent = e.message || 'Could not send SMS. Please try again.';
             show('phone-error');
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Send verification code';
+        }
+    }
+
+    async function verifyPin() {
+        const btn   = $('verify-pin-btn');
+        const pin   = val('pin-input').replace(/\D/g, '');
+        const errEl = $('pin-error');
+
+        if (pin.length !== 4) {
+            errEl.textContent = 'Enter the 4-digit code from your SMS.';
+            show('pin-error');
+            return;
+        }
+
+        btn.disabled = true;
+        hide('pin-error');
+
+        try {
+            const id   = await resolveDeviceId();
+            const data = await post('/app/verify/confirm-pin', { device_id: id, pin });
+
+            state.phoneVerified = true;
+
+            // Populate identity card from response
+            const nameEl = $('identity-name');
+            if (nameEl) nameEl.textContent = data.resolved_name || '';
+
+            const phoneEl = $('identity-phone');
+            if (phoneEl) {
+                // Reconstruct E.164 from dial code + input
+                const dialCode = $('phone-country')?.value ?? '+27';
+                const local    = val('pref-phone').replace(/\D/g, '').replace(/^0/, '');
+                if (phoneEl) phoneEl.textContent = dialCode + local;
+            }
+
+            if (!data.resolved_name) {
+                show('identity-unknown');
+            } else {
+                hide('identity-unknown');
+            }
+
+            setV('pin-input', '');
+            applyState();
+            window.showToast?.('Mobile number verified ✓');
+        } catch (e) {
+            errEl.textContent = e.message || 'Incorrect code. Please try again.';
+            show('pin-error');
+            $('pin-input')?.select();
         } finally {
             btn.disabled = false;
         }
     }
 
-    // ── Push toggle change ─────────────────────────────────────────────────
-    function bindPushToggle() {
+    // ── Push toggle ────────────────────────────────────────────────────────
+    async function refreshPushToggle() {
         const toggle    = $('pushToggle');
         const statusLbl = $('push-status-label');
         if (!toggle) return;
 
-        toggle.addEventListener('change', async () => {
+        if (!state.phoneVerified) {
+            toggle.checked  = false;
             toggle.disabled = true;
-            try {
-                if (toggle.checked) {
-                    await window.pushNotifications.subscribe();
-                    if (statusLbl) statusLbl.textContent = 'Enabled';
-                    $('enable-push')?.classList.add('d-none');
-                    window.showToast?.('Push notifications enabled');
-                } else {
-                    await window.pushNotifications.unsubscribe();
-                    if (statusLbl) statusLbl.textContent = 'Disabled';
-                    window.showToast?.('Push notifications disabled');
-                }
-            } catch (e) {
-                toggle.checked = !toggle.checked;
-                window.showToast?.('Could not update — try again', 'error');
-            } finally {
-                toggle.disabled = false;
-            }
-        });
+            show('push-phone-required');
+            return;
+        }
+
+        hide('push-phone-required');
+        if (!window.pushNotifications) return;
+
+        const status = await window.pushNotifications.checkStatus();
+
+        if (status.permission === 'denied') {
+            if (statusLbl) statusLbl.textContent = 'Blocked — reset in browser settings';
+            toggle.disabled = true;
+            return;
+        }
+
+        toggle.disabled = false;
+        toggle.checked  = status.subscribed;
+        if (statusLbl) statusLbl.textContent = status.subscribed ? 'Enabled' : 'Disabled';
     }
 
-    // ── Searchable select ──────────────────────────────────────────────────
-    //
-    // Each .pwa-searchable-select widget works as follows:
-    //   - Text input drives a debounced AJAX search to /app/field-options/{key}
-    //   - Results appear in a floating .pwa-search-results list
-    //   - Selecting a result writes the value to the hidden input and hides the list
-    //   - On load, if a value is saved, we fetch its label from the server to display
-
+    // ── Searchable select restore ──────────────────────────────────────────
     let searchTimers = {};
 
     function initSearchableSelects() {
         document.querySelectorAll('.pwa-searchable-select').forEach(widget => {
-            const key        = widget.dataset.fieldKey;
-            const url        = widget.dataset.optionsUrl;
-            const searchInput= widget.querySelector('.pwa-search-input');
-            const hiddenInput= widget.querySelector('input[type="hidden"]');
-            const resultsList= widget.querySelector('.pwa-search-results');
-            const selectedEl = widget.querySelector('.pwa-search-selected');
+            const key         = widget.dataset.fieldKey;
+            const url         = widget.dataset.optionsUrl;
+            const searchInput = widget.querySelector('.pwa-search-input');
+            const hiddenInput = widget.querySelector('input[type="hidden"]');
+            const resultsList = widget.querySelector('.pwa-search-results');
+            const selectedEl  = widget.querySelector('.pwa-search-selected');
 
             if (!searchInput || !hiddenInput || !resultsList) return;
 
-            // Fetch results from server
             async function fetchOptions(search) {
                 try {
                     const res = await fetch(url + (search ? '?search=' + encodeURIComponent(search) : ''), {
                         headers: { 'Accept': 'application/json' }
                     });
                     if (!res.ok) return [];
-                    const data = await res.json();
-                    return data.options ?? [];
+                    return (await res.json()).options ?? [];
                 } catch { return []; }
             }
 
-            // Render results into the dropdown list
             function renderResults(options) {
                 resultsList.innerHTML = '';
                 if (!options.length) {
-                    resultsList.innerHTML =
-                        '<div class="list-group-item text-muted small py-2">No results</div>';
+                    resultsList.innerHTML = '<div class="list-group-item text-muted small py-2">No results</div>';
                 } else {
                     options.forEach(opt => {
                         const item = document.createElement('button');
@@ -1093,7 +863,7 @@ usort($countries, fn($a, $b) =>
                         item.className = 'list-group-item list-group-item-action py-2';
                         item.textContent = opt.label;
                         item.addEventListener('mousedown', e => {
-                            e.preventDefault(); // prevent blur before click registers
+                            e.preventDefault();
                             selectOption(opt.value, opt.label);
                         });
                         resultsList.appendChild(item);
@@ -1102,151 +872,58 @@ usort($countries, fn($a, $b) =>
                 resultsList.classList.remove('d-none');
             }
 
-            // Commit a selection — then auto-save so the value is persisted
             function selectOption(value, label) {
                 hiddenInput.value       = value;
                 searchInput.value       = '';
                 searchInput.placeholder = label;
-                if (selectedEl) {
-                    selectedEl.textContent = label;
-                    selectedEl.classList.remove('d-none');
-                }
+                if (selectedEl) { selectedEl.textContent = label; selectedEl.classList.remove('d-none'); }
                 resultsList.classList.add('d-none');
                 resultsList.innerHTML = '';
-                // Save immediately — don't wait for blur
                 scheduleAutoSave();
             }
 
-            // Debounced input handler
             searchInput.addEventListener('input', () => {
                 clearTimeout(searchTimers[key]);
                 const q = searchInput.value.trim();
-                if (!q) {
-                    resultsList.classList.add('d-none');
-                    return;
-                }
-                searchTimers[key] = setTimeout(async () => {
-                    const options = await fetchOptions(q);
-                    renderResults(options);
-                }, 280);
+                if (!q) { resultsList.classList.add('d-none'); return; }
+                searchTimers[key] = setTimeout(async () => renderResults(await fetchOptions(q)), 280);
             });
-
-            // Hide results on blur (slight delay so mousedown fires first)
-            searchInput.addEventListener('blur', () => {
-                setTimeout(() => resultsList.classList.add('d-none'), 150);
-            });
-
-            // Show results again on focus if there's a query
-            searchInput.addEventListener('focus', () => {
-                if (searchInput.value.trim()) searchInput.dispatchEvent(new Event('input'));
-            });
+            searchInput.addEventListener('blur',  () => setTimeout(() => resultsList.classList.add('d-none'), 150));
+            searchInput.addEventListener('focus', () => { if (searchInput.value.trim()) searchInput.dispatchEvent(new Event('input')); });
         });
     }
 
-    // Restore the displayed label for a saved searchable-select value
     async function restoreSearchableLabel(widget, savedValue) {
         const url        = widget.dataset.optionsUrl;
         const searchInput= widget.querySelector('.pwa-search-input');
         const selectedEl = widget.querySelector('.pwa-search-selected');
         if (!url || !searchInput) return;
-
         try {
-            // Pass ?value= so the endpoint can do a targeted lookup instead of
-            // returning an unpredictable subset of the full list.
-            const res = await fetch(
-                url + '?value=' + encodeURIComponent(savedValue),
-                { headers: { 'Accept': 'application/json' } }
-            );
+            const res     = await fetch(url + '?value=' + encodeURIComponent(savedValue), { headers: { 'Accept': 'application/json' } });
             if (!res.ok) return;
-            const data    = await res.json();
-            const options = data.options ?? [];
-            // Endpoint returns just the matching item when ?value= is supplied,
-            // but fall back to a find() in case the resolver ignores the param.
-            const match = options.find(o => String(o.value) === String(savedValue))
-                       ?? options[0];
+            const options = (await res.json()).options ?? [];
+            const match   = options.find(o => String(o.value) === String(savedValue)) ?? options[0];
             if (match) {
                 searchInput.placeholder = match.label;
-                if (selectedEl) {
-                    selectedEl.textContent = match.label;
-                    selectedEl.classList.remove('d-none');
-                }
+                if (selectedEl) { selectedEl.textContent = match.label; selectedEl.classList.remove('d-none'); }
             }
-        } catch { /* non-fatal */ }
+        } catch {}
     }
 
-    // ── Boot ───────────────────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', () => {
-        initSearchableSelects();
-        loadPreferences();
-        bindPushToggle();
-
-        // Preaching reminders toggle
-        $('preachingRemindersToggle')?.addEventListener('change', async function () {
-            const checked = this.checked;
-            try {
-                const id = await resolveDeviceId();
-                if (!id) throw new Error('Device ID not available');
-                await post('/app/preferences/preaching-reminders', {
-                    device_id: id,
-                    enabled:   checked,
-                });
-                window.showToast?.(checked ? 'Preaching reminders enabled' : 'Preaching reminders disabled');
-            } catch (e) {
-                this.checked = !checked;   // revert on failure
-                window.showToast?.('Could not update — try again', 'error');
-            }
-        });
-
-        $('send-pin-btn')    ?.addEventListener('click',  sendPin);
-        $('resend-pin-btn')  ?.addEventListener('click',  sendPin);
-        $('verify-pin-btn')  ?.addEventListener('click',  verifyPin);
-        $('save-phone-btn')  ?.addEventListener('click',  savePhone);
-
-        // ── Auto-save on blur for text/email fields ───────────────────────
-        ['pref-name', 'pref-email'].forEach(id => {
-            $(id)?.addEventListener('blur',  scheduleAutoSave);
-            $(id)?.addEventListener('input', updateVerifyButton);
-        });
-        $('pref-name')?.addEventListener('input', () => hide('name-error'));
-
-        // Auto-save on change for toggle/select custom fields
-        document.querySelectorAll('[data-custom-key]').forEach(el => {
-            if (el.type === 'hidden') return;  // searchable selects save via selectOption
-            const evt = (el.type === 'checkbox' || el.tagName === 'SELECT') ? 'change' : 'blur';
-            el.addEventListener(evt, scheduleAutoSave);
-        });
-
-        // Auto-submit PIN on 4th digit
-        $('pin-input')?.addEventListener('input', function () {
-            this.value = this.value.replace(/\D/g, '').slice(0, 4);
-            if (this.value.length === 4) verifyPin();
-        });
-
-        // Digits only in phone local field
-        $('pref-phone')?.addEventListener('input', function () {
-            this.value = this.value.replace(/\D/g, '');
-        });
-
-        // ── Inbox badge ────────────────────────────────────────────────────
-        loadInboxBadge();
-    });
-
+    // ── Inbox badge ────────────────────────────────────────────────────────
     async function loadInboxBadge() {
-        const badge   = document.getElementById('um-unread-badge');
-        const summary = document.getElementById('um-msg-summary');
+        const badge   = $('um-unread-badge');
+        const summary = $('um-msg-summary');
         if (!badge || !summary) return;
-
         try {
             const id  = await resolveDeviceId();
             const res = await fetch('/app/messages/unread?device_id=' + encodeURIComponent(id), {
                 headers: { 'Accept': 'application/json' }
             });
             if (!res.ok) return;
-            const data = await res.json();
-
+            const data   = await res.json();
             const unread = data.unread ?? 0;
             const total  = data.total  ?? 0;
-
             if (unread > 0) {
                 badge.textContent = unread > 99 ? '99+' : unread;
                 badge.classList.remove('d-none');
@@ -1258,7 +935,91 @@ usort($countries, fn($a, $b) =>
                 badge.classList.add('d-none');
                 summary.textContent = 'No messages yet';
             }
-        } catch { /* non-fatal */ }
+        } catch {}
     }
+
+    // ── Boot ───────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        initSearchableSelects();
+        loadPreferences();
+        loadInboxBadge();
+
+        // SMS verification
+        $('send-sms-pin-btn')?.addEventListener('click', sendSmsPin);
+        $('resend-pin-btn')  ?.addEventListener('click', () => {
+            hide('pin-entry-section');
+            show('phone-entry-section');
+            setV('pin-input', '');
+            hide('pin-error');
+        });
+        $('change-phone-btn')?.addEventListener('click', () => {
+            hide('pin-entry-section');
+            show('phone-entry-section');
+            setV('pin-input', '');
+            hide('pin-error');
+        });
+        $('change-number-btn')?.addEventListener('click', () => {
+            // Allow re-verification — show entry form, keep identity card visible
+            // until new number is confirmed
+            show('verification-card');
+            show('phone-entry-section');
+            hide('pin-entry-section');
+        });
+
+        // PIN auto-submit on 4th digit
+        $('pin-input')?.addEventListener('input', function () {
+            this.value = this.value.replace(/\D/g, '').slice(0, 4);
+            if (this.value.length === 4) verifyPin();
+        });
+        $('verify-pin-btn')?.addEventListener('click', verifyPin);
+
+        // Digits only in phone input
+        $('pref-phone')?.addEventListener('input', function () {
+            this.value = this.value.replace(/\D/g, '');
+        });
+
+        // Preaching reminders toggle
+        $('preachingRemindersToggle')?.addEventListener('change', async function () {
+            const checked = this.checked;
+            try {
+                const id = await resolveDeviceId();
+                await post('/app/preferences/preaching-reminders', { device_id: id, enabled: checked });
+                window.showToast?.(checked ? 'Preaching reminders enabled' : 'Preaching reminders disabled');
+            } catch {
+                this.checked = !checked;
+                window.showToast?.('Could not update — try again', 'error');
+            }
+        });
+
+        // Push toggle
+        $('pushToggle')?.addEventListener('change', async function () {
+            this.disabled = true;
+            const statusLbl = $('push-status-label');
+            try {
+                if (this.checked) {
+                    await window.pushNotifications.subscribe();
+                    if (statusLbl) statusLbl.textContent = 'Enabled';
+                    $('enable-push')?.classList.add('d-none');
+                    window.showToast?.('Push notifications enabled');
+                } else {
+                    await window.pushNotifications.unsubscribe();
+                    if (statusLbl) statusLbl.textContent = 'Disabled';
+                    window.showToast?.('Push notifications disabled');
+                }
+            } catch {
+                this.checked = !this.checked;
+                window.showToast?.('Could not update — try again', 'error');
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Auto-save custom fields on change/blur
+        document.querySelectorAll('[data-custom-key]').forEach(el => {
+            if (el.type === 'hidden') return;
+            const evt = (el.type === 'checkbox' || el.tagName === 'SELECT') ? 'change' : 'blur';
+            el.addEventListener(evt, scheduleAutoSave);
+        });
+    });
 })();
 </script>

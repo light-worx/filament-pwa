@@ -96,25 +96,20 @@ class PushSubscriptionController extends Controller
     {
         $data = $request->validate([
             'device_id'       => 'required|string',
-            'name'            => 'nullable|string|max:255',
-            'email'           => 'nullable|email|max:255',
             'custom_settings' => 'nullable|array',
         ]);
 
         $preference = UserPreference::updateOrCreate(
             ['device_id' => $data['device_id']],
             [
-                'name'            => $data['name']            ?? null,
-                'email'           => $data['email']           ?? null,
                 'custom_settings' => $data['custom_settings'] ?? null,
             ]
         );
 
         return response()->json([
-            'status'         => 'saved',
-            'email_verified' => (bool) $preference->email_verified_at,
-            'phone_verified' => (bool) $preference->phone_verified,
-            'phone'          => $preference->phone,
+            'status'        => 'saved',
+            'phone_verified'=> (bool) $preference->phone_verified,
+            'phone'         => $preference->phone,
         ]);
     }
 
@@ -133,10 +128,16 @@ class PushSubscriptionController extends Controller
             return response()->json((object) []);
         }
 
+        // Resolve display name from the app's configured identity model
+        $resolvedName = $preference->resolveIdentityName();
+        $notFoundMsg  = null;
+        if ($preference->phone_verified && !$resolvedName) {
+            $notFoundMsg = config('pwa.identity.not_found_message');
+        }
+
         return response()->json([
-            'name'                => $preference->name,
-            'email'               => $preference->email,
-            'email_verified'      => (bool) $preference->email_verified_at,
+            'resolved_name'       => $resolvedName,
+            'not_found_message'   => $notFoundMsg,
             'phone'               => $preference->phone,
             'phone_verified'      => (bool) $preference->phone_verified,
             'preaching_reminders' => (bool) $preference->preaching_reminders,
@@ -152,7 +153,9 @@ class PushSubscriptionController extends Controller
     {
         $data = $request->validate([
             'device_id' => 'required|string',
-            'enabled'   => 'required|boolean',
+            // 'present' checks the key exists; 'boolean' accepts true/false/1/0.
+            // Avoid 'required|boolean' — 'required' rejects false as "empty".
+            'enabled'   => 'present|boolean',
         ]);
 
         $preference = UserPreference::where('device_id', $data['device_id'])->first();
@@ -162,6 +165,7 @@ class PushSubscriptionController extends Controller
         }
 
         $preference->update(['preaching_reminders' => $data['enabled']]);
+        $preference->refresh();
 
         return response()->json([
             'status'              => 'ok',
