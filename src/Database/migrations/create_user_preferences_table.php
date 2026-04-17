@@ -14,11 +14,10 @@ return new class extends Migration
             $table->string('email')->nullable();
             $table->string('phone', 50)->nullable();
             $table->json('custom_settings')->nullable()->comment('Developer-defined extra fields');
-            $table->string('email_verification_pin', 4)->nullable();
+            $table->string('phone_verification_pin', 4)->nullable();
             $table->timestamp('pin_expires_at')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->boolean('phone_verified')->default(false);
-            $table->boolean('preaching_reminders')->default(false);
             $table->timestamps();
         });
     }

@@ -6,15 +6,10 @@ use Lightworx\FilamentPwa\Http\Controllers\MessagesController;
 use Lightworx\FilamentPwa\Http\Controllers\PushSubscriptionController;
 use Lightworx\FilamentPwa\Http\Controllers\VerificationController;
 
-Route::middleware(['web'])->group(function () {
-
-    Route::get(config('pwa.app_route'), function () {
-        return view('vendor.pwa.pages.home');
-    })->name('app.home');
-});
-
 Route::prefix('app')->middleware('web')->group(function () {
  
+    Route::get(config('pwa.app_route'), function () { return view('vendor.pwa.pages.home'); })->name('app.home');
+
     // ── Push subscription lifecycle ───────────────────────────────────────────
     Route::post('/subscribe',           [PushSubscriptionController::class, 'store']);
     Route::post('/unsubscribe',         [PushSubscriptionController::class, 'destroy']);
@@ -33,15 +28,9 @@ Route::prefix('app')->middleware('web')->group(function () {
     Route::get('/field-options/{key}', FieldOptionsController::class)
          ->where('key', '[a-z0-9_]+');
  
-    // ── Email verification ────────────────────────────────────────────────────
+    // ── SMS phone verification ───────────────────────────────────────────────
     Route::post('/verify/send-pin',     [VerificationController::class, 'sendPin']);
     Route::post('/verify/confirm-pin',  [VerificationController::class, 'verifyPin']);
- 
-    // ── Phone (gated behind email verification) ───────────────────────────────
-    Route::post('/verify/phone',        [VerificationController::class, 'savePhone']);
- 
-    // ── Preaching reminders opt-in ────────────────────────────────────────────
-    Route::post('/preferences/preaching-reminders', [PushSubscriptionController::class, 'togglePreachingReminders']);
  
     // ── Messages inbox ────────────────────────────────────────────────────────
     Route::get('/messages',             [MessagesController::class, 'index']);

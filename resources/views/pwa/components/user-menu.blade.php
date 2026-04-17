@@ -344,27 +344,10 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
     @stack('pwa-user-fields')
     @stack('pwa-user-settings')
 
-    {{-- ── Preaching reminders (gated: phone must be verified) ─────────── --}}
-    <div id="preaching-card" class="card shadow-sm border-0 mb-3 d-none">
-        <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
-            <div>
-                <div class="small fw-semibold">
-                    <i class="bi bi-book me-1 text-muted"></i>Preaching reminders
-                </div>
-                <div class="text-muted" style="font-size:.73rem">
-                    Notify me if I'm preaching this weekend
-                </div>
-            </div>
-            <div class="form-check form-switch mb-0 ms-3">
-                <input class="form-check-input" type="checkbox" role="switch"
-                       id="preachingRemindersToggle">
-            </div>
-        </div>
-    </div>
-
-    {{-- ── Inbox link ───────────────────────────────────────────────────── --}}
-    <a href="/app/messages" class="card shadow-sm border-0 mb-3 text-decoration-none"
-       style="display:block; border-radius:14px;">
+    {{-- ── Inbox link (hidden until phone verified + identity resolved) ─── --}}
+    <a id="inbox-link" href="/app/messages"
+       class="card shadow-sm border-0 mb-3 text-decoration-none d-none"
+       style="display:none; border-radius:14px;">
         <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
             <div class="position-relative flex-shrink-0">
                 <i class="bi bi-inbox fs-5 text-muted"></i>
@@ -483,7 +466,7 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
     const setV = (id, v) => { const el = $(id); if (el) el.value = v ?? ''; };
 
     // ── State ──────────────────────────────────────────────────────────────
-    let state = { phoneVerified: false };
+    let state = { phoneVerified: false, identityResolved: false };
 
     // ── Apply state to UI ──────────────────────────────────────────────────
     function applyState() {
@@ -492,14 +475,19 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
             hide('verification-card');
             // Show gated sections
             @if(!empty($customFields)) show('custom-fields-card'); @endif
-            show('preaching-card');
             show('push-card');
+            // Inbox only shown when identity is also resolved (name found)
+            if (state.identityResolved) {
+                const inboxEl = document.getElementById('inbox-link');
+                if (inboxEl) inboxEl.style.display = 'block';
+            }
         } else {
             hide('identity-card');
             show('verification-card');
             @if(!empty($customFields)) hide('custom-fields-card'); @endif
-            hide('preaching-card');
             hide('push-card');
+            const inboxEl = document.getElementById('inbox-link');
+            if (inboxEl) inboxEl.style.display = 'none';
             // Always show phone entry (not PIN) unless mid-flow
             show('phone-entry-section');
             hide('pin-entry-section');
@@ -517,7 +505,8 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
             if (!res.ok) return;
             const data = await res.json();
 
-            state.phoneVerified = !!data.phone_verified;
+            state.phoneVerified    = !!data.phone_verified;
+            state.identityResolved = !!data.phone_verified && !!data.resolved_name;
 
             if (state.phoneVerified) {
                 // Identity card
@@ -537,10 +526,6 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
                 } else {
                     hide('identity-unknown');
                 }
-
-                // Restore preaching toggle
-                const prToggle = $('preachingRemindersToggle');
-                if (prToggle) prToggle.checked = !!data.preaching_reminders;
 
                 // Restore custom fields
                 const custom = data.custom_settings ?? {};
@@ -767,7 +752,8 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
             const id   = await resolveDeviceId();
             const data = await post('/app/verify/confirm-pin', { device_id: id, pin });
 
-            state.phoneVerified = true;
+            state.phoneVerified    = true;
+            state.identityResolved = !!data.resolved_name;
 
             // Populate identity card from response
             const nameEl = $('identity-name');
@@ -775,10 +761,9 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
 
             const phoneEl = $('identity-phone');
             if (phoneEl) {
-                // Reconstruct E.164 from dial code + input
                 const dialCode = $('phone-country')?.value ?? '+27';
                 const local    = val('pref-phone').replace(/\D/g, '').replace(/^0/, '');
-                if (phoneEl) phoneEl.textContent = dialCode + local;
+                phoneEl.textContent = dialCode + local;
             }
 
             if (!data.resolved_name) {
@@ -976,19 +961,6 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
         // Digits only in phone input
         $('pref-phone')?.addEventListener('input', function () {
             this.value = this.value.replace(/\D/g, '');
-        });
-
-        // Preaching reminders toggle
-        $('preachingRemindersToggle')?.addEventListener('change', async function () {
-            const checked = this.checked;
-            try {
-                const id = await resolveDeviceId();
-                await post('/app/preferences/preaching-reminders', { device_id: id, enabled: checked });
-                window.showToast?.(checked ? 'Preaching reminders enabled' : 'Preaching reminders disabled');
-            } catch {
-                this.checked = !checked;
-                window.showToast?.('Could not update — try again', 'error');
-            }
         });
 
         // Push toggle

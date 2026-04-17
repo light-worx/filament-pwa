@@ -13,7 +13,6 @@ class UserPreference extends Model
         'phone_verification_pin',
         'pin_expires_at',
         'phone_verified',
-        'preaching_reminders',
         'custom_settings',
     ];
 
@@ -21,7 +20,6 @@ class UserPreference extends Model
         'custom_settings'     => 'array',
         'pin_expires_at'      => 'datetime',
         'phone_verified'      => 'boolean',
-        'preaching_reminders' => 'boolean',
     ];
 
     protected $hidden = [
