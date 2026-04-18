@@ -12,6 +12,27 @@
     <meta name="vapid-key"    content="{{ config('webpush.vapid.public_key') }}">
     <meta name="app-version"  content="{{ config('app.version', '1.0.0') }}">
     <meta name="flags-path"   content="{{ asset('pwa/flags') }}">
+    {{--
+        pwa-base: the base URL for all package API calls, without trailing slash.
+        Computed from route_prefix / route_domain config so JS never hardcodes /app/.
+        In path-prefix mode: https://site.com/app
+        In subdomain mode:   https://app.site.com
+    --}}
+    @php
+        $pwaPrefix = config('pwa.route_prefix', 'app');
+        $pwaDomain = config('pwa.route_domain');
+        if ($pwaDomain) {
+            $host    = parse_url(config('app.url'), PHP_URL_SCHEME) . '://'
+                     . $pwaDomain . '.'
+                     . parse_url(config('app.url'), PHP_URL_HOST);
+            $pwaBase = rtrim($host, '/');
+        } else {
+            $pwaBase = $pwaPrefix !== ''
+                ? rtrim(url($pwaPrefix), '/')
+                : rtrim(url('/'), '/');
+        }
+    @endphp
+    <meta name="pwa-base" content="{{ $pwaBase }}">
 
     {{-- Styles --}}
     <link href="{{ asset('pwa/css/bootstrap.min.css') }}" rel="stylesheet">
@@ -20,7 +41,6 @@
 
     {{-- Emit theme as CSS custom properties so any override is a config change --}}
     <style>
-        a {text-decoration: none;}
         :root {
             --pwa-primary:       {{ config('pwa.theme.primary',      '#1f2937') }};
             --pwa-accent:        {{ config('pwa.theme.accent',       '#3b82f6') }};

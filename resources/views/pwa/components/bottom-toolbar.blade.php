@@ -44,8 +44,10 @@
 {{-- Badge loader — runs after push-notifications.js has settled the device id --}}
 <script>
 (function () {
-    const badges = document.querySelectorAll('[data-badge-type="messages"]');
+    const badges   = document.querySelectorAll('[data-badge-type="messages"]');
     if (!badges.length) return;
+    const PWA_BASE = (document.querySelector('meta[name="pwa-base"]')?.content ?? '/app')
+                     .replace(/\/$/, '');
 
     async function loadMessageBadge() {
         // Wait for device id to be settled (same logic as user-menu)
@@ -63,7 +65,7 @@
 
         try {
             const res = await fetch(
-                '/app/messages/unread?device_id=' + encodeURIComponent(deviceId),
+                PWA_BASE + '/messages/unread?device_id=' + encodeURIComponent(deviceId),
                 { headers: { 'Accept': 'application/json' } }
             );
             if (!res.ok) return;

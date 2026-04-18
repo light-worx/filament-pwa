@@ -49,6 +49,20 @@ usort($countries, fn($a, $b) =>
 
 $unknownNumberMessage = config('pwa.identity.unknown_message',
     'Your number is not yet linked to an account on this site.');
+
+// Base URL for all API calls — read from meta tag set in app.blade.php layout
+// Falls back to computing it directly so the component works even if included standalone
+$pwaPrefix = config('pwa.route_prefix', 'app');
+$pwaDomain = config('pwa.route_domain');
+if ($pwaDomain) {
+    $pwaBase = rtrim(
+        parse_url(config('app.url'), PHP_URL_SCHEME) . '://'
+        . $pwaDomain . '.' . parse_url(config('app.url'), PHP_URL_HOST),
+        '/'
+    );
+} else {
+    $pwaBase = $pwaPrefix !== '' ? rtrim(url($pwaPrefix), '/') : rtrim(url('/'), '/');
+}
 @endphp
 
 <style>
@@ -285,7 +299,7 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
                     @if($fType === 'select' && $isSearchable)
                         <div class="pwa-searchable-select"
                              data-field-key="{{ $fKey }}"
-                             data-options-url="{{ url('/app/field-options/' . $fKey) }}"
+                             data-options-url="{{ $pwaBase }}/field-options/{{ $fKey }}"
                              data-placeholder="{{ $placeholder }}">
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control pwa-search-input"
@@ -345,7 +359,7 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
     @stack('pwa-user-settings')
 
     {{-- ── Inbox link (hidden until phone verified + identity resolved) ─── --}}
-    <a id="inbox-link" href="/app/messages"
+    <a id="inbox-link" href="{{ $pwaBase }}/messages"
        class="card shadow-sm border-0 mb-3 text-decoration-none d-none"
        style="display:none; border-radius:14px;">
         <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
@@ -394,7 +408,9 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
 (function () {
     'use strict';
 
-    const CSRF    = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+    const CSRF     = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+    const PWA_BASE = (document.querySelector('meta[name="pwa-base"]')?.content ?? '/app')
+                     .replace(/\/$/, '');
     const STORAGE = 'pwa_device_id';
 
     // ── Cookie helper ──────────────────────────────────────────────────────
@@ -499,7 +515,7 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
     async function loadPreferences() {
         try {
             const id  = await resolveDeviceId();
-            const res = await fetch('/app/preferences?device_id=' + encodeURIComponent(id), {
+            const res = await fetch(PWA_BASE + '/preferences?device_id=' + encodeURIComponent(id), {
                 headers: { 'Accept': 'application/json' }
             });
             if (!res.ok) return;
@@ -564,7 +580,7 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
         });
 
         try {
-            await post('/app/preferences', {
+            await post(PWA_BASE + '/preferences', {
                 device_id:       deviceId(),
                 custom_settings: custom,
             });
@@ -715,7 +731,7 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
 
         try {
             const id = await resolveDeviceId();
-            await post('/app/verify/send-pin', { device_id: id, phone: e164 });
+            await post(PWA_BASE + '/verify/send-pin', { device_id: id, phone: e164 });
 
             // Switch to PIN entry view
             hide('phone-entry-section');
@@ -750,7 +766,7 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
 
         try {
             const id   = await resolveDeviceId();
-            const data = await post('/app/verify/confirm-pin', { device_id: id, pin });
+            const data = await post(PWA_BASE + '/verify/confirm-pin', { device_id: id, pin });
 
             state.phoneVerified    = true;
             state.identityResolved = !!data.resolved_name;
@@ -902,7 +918,7 @@ $unknownNumberMessage = config('pwa.identity.unknown_message',
         if (!badge || !summary) return;
         try {
             const id  = await resolveDeviceId();
-            const res = await fetch('/app/messages/unread?device_id=' + encodeURIComponent(id), {
+            const res = await fetch(PWA_BASE + '/messages/unread?device_id=' + encodeURIComponent(id), {
                 headers: { 'Accept': 'application/json' }
             });
             if (!res.ok) return;
