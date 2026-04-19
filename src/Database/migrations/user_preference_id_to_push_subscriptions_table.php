@@ -25,6 +25,12 @@ return new class extends Migration
                   ->nullable()
                   ->constrained('user_preferences')
                   ->nullOnDelete();
+            if (Schema::hasColumn('push_subscriptions', 'subscribable_type')) {
+                $table->string('subscribable_type')->nullable()->change();
+                }
+            if (Schema::hasColumn('push_subscriptions', 'subscribable_id')) {
+                $table->unsignedBigInteger('subscribable_id')->nullable()->change();
+            }
         });
     }
 
@@ -36,6 +42,14 @@ return new class extends Migration
         Schema::table('push_subscriptions', function ($table) {
             $table->dropForeign(['user_preference_id']);
             $table->dropColumn('user_preference_id');
+            if (Schema::hasColumn('push_subscriptions', 'subscribable_type')) {
+                $table->string('subscribable_type')->nullable(false)->change();
+            }
+            if (Schema::hasColumn('push_subscriptions', 'subscribable_id')) {
+                $table->unsignedBigInteger('subscribable_id')->nullable(false)->change();
+            }
         });
     }
 };
+
+
