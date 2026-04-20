@@ -6,7 +6,7 @@
     </button>
 
     {{-- Centre: app title --}}
-    <span class="fs-5 fw-bold">{{ $title ?? config('pwa.app_name') }}</span>
+    <span class="fw-bold">{{ $title ?? config('pwa.app_name') }}</span>
 
     {{-- Right: install + push + user --}}
     <div class="d-flex align-items-center gap-2">
