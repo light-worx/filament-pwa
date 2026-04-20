@@ -167,7 +167,7 @@ return [
     |
     | After a phone number is verified, the package looks up the user's name
     | from your app's own model. Configure the model class, the field that
-    | holds the phone number (must be stored in E.164: +27820000000), and
+    | holds the phone number (must be stored in E.164: +27794999139), and
     | the field (or dot-notation path) that holds the display name.
     |
     | not_found_message: shown in the user panel when the phone number is
@@ -209,5 +209,22 @@ return [
     |--------------------------------------------------------------------------
     */
     'install_prompt' => env('PWA_INSTALL_PROMPT', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Push notification icons
+    |
+    | icon  — shown as the notification image (192×192px recommended).
+    |         Defaults to /pwa/icons/icon-192.png
+    | badge — small monochrome icon shown in the status bar on Android (72×72px).
+    |         Defaults to /pwa/icons/badge-72.png
+    |
+    | Set these to paths within your public directory, e.g.:
+    |   'icon'  => '/images/notification-icon.png',
+    |   'badge' => '/images/notification-badge.png',
+    |--------------------------------------------------------------------------
+    */
+    'push_icon'  => env('PWA_PUSH_ICON',  '/pwa/icons/icon-192.png'),
+    'push_badge' => env('PWA_PUSH_BADGE', '/pwa/icons/badge-72.png'),
 
 ];

@@ -5,6 +5,7 @@ namespace Lightworx\FilamentPwa\Services;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Lightworx\FilamentPwa\Models\PushMessage;
+use Lightworx\FilamentPwa\Models\PushMessage;
 use Lightworx\FilamentPwa\Models\PushSubscription;
 use Lightworx\FilamentPwa\Models\UserPreference;
 use Minishlink\WebPush\WebPush;
@@ -35,10 +36,10 @@ class PushNotificationService
      *
      * Usage:
      *   app(PushNotificationService::class)
-     *       ->toPhone('+27820000000', 'Hello', 'Your order is ready', '/orders/123');
+     *       ->toPhone('+27794999139', 'Hello', 'Your order is ready', '/orders/123');
      *
      *   // or via the facade:
-     *   PushNotification::toPhone('+27820000000', 'Hello', 'Your order is ready');
+     *   PushNotification::toPhone('+27794999139', 'Hello', 'Your order is ready');
      */
     public function toPhone(
         string  $phone,
@@ -69,7 +70,7 @@ class PushNotificationService
      * Send to multiple phone numbers in a single batch.
      *
      * Usage:
-     *   PushNotification::toPhones(['+27820000000', '+447911123456'], 'Alert', 'Message');
+     *   PushNotification::toPhones(['+27794999139', '+447911123456'], 'Alert', 'Message');
      */
     public function toPhones(
         array   $phones,
@@ -176,8 +177,8 @@ class PushNotificationService
             'title' => $title,
             'body'  => $body,
             'url'   => $url,
-            'icon'  => '/pwa/icons/icon-192.png',
-            'badge' => '/pwa/icons/badge-72.png',
+            'icon'  => config('pwa.push_icon',  '/pwa/icons/icon-192.png'),
+            'badge' => config('pwa.push_badge', '/pwa/icons/badge-72.png'),
             'tag'   => 'pwa-notification',
         ], $extra));  // $extra can override any of the above
 

@@ -88,18 +88,31 @@ self.addEventListener('fetch', event => {
 
 // ── Push ─────────────────────────────────────────────────────────────────────
 
+// Icon paths are stored here when the page sends them via postMessage.
+// This lets the SW use the app-configured icons even when the payload
+// doesn't include them (e.g. notifications sent from external systems).
+let pushIcon  = '/pwa/icons/icon-192.png';
+let pushBadge = '/pwa/icons/badge-72.png';
+
+self.addEventListener('message', event => {
+    if (event.data?.type === 'PWA_CONFIG') {
+        if (event.data.pushIcon)  pushIcon  = event.data.pushIcon;
+        if (event.data.pushBadge) pushBadge = event.data.pushBadge;
+    }
+});
+
 self.addEventListener('push', event => {
     let data = {};
     try { data = event.data?.json() ?? {}; } catch { data = { title: event.data?.text() }; }
 
     const title   = data.title ?? 'Notification';
     const options = {
-        body:    data.body  ?? '',
-        icon:    data.icon  ?? '/pwa/icons/icon-192.png',
-        badge:   data.badge ?? '/pwa/icons/badge-72.png',
-        tag:     data.tag   ?? 'pwa-notification',       // replaces previous same-tag notification
+        body:     data.body  ?? '',
+        icon:     data.icon  ?? pushIcon,    // payload > postMessage config > SW default
+        badge:    data.badge ?? pushBadge,
+        tag:      data.tag   ?? 'pwa-notification',
         renotify: false,
-        data:    { url: data.url ?? '/' },
+        data:     { url: data.url ?? '/' },
     };
 
     event.waitUntil(self.registration.showNotification(title, options));

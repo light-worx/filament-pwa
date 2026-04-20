@@ -11,6 +11,8 @@
     <meta name="csrf-token"   content="{{ csrf_token() }}">
     <meta name="vapid-key"    content="{{ config('webpush.vapid.public_key') }}">
     <meta name="app-version"  content="{{ config('app.version', '1.0.0') }}">
+    <meta name="push-icon"    content="{{ config('pwa.push_icon',  '/pwa/icons/icon-192.png') }}">
+    <meta name="push-badge"   content="{{ config('pwa.push_badge', '/pwa/icons/badge-72.png') }}">
     <meta name="flags-path"   content="{{ asset('pwa/flags') }}">
     {{--
         pwa-base: the base URL for all package API calls, without trailing slash.
@@ -32,7 +34,9 @@
                 : rtrim(url('/'), '/');
         }
     @endphp
-    <meta name="pwa-base" content="{{ $pwaBase }}">
+    <meta name="pwa-base"       content="{{ $pwaBase }}">
+    <meta name="pwa-push-icon"  content="{{ asset(config('pwa.push_icon',  'pwa/icons/icon-192.png')) }}">
+    <meta name="pwa-push-badge" content="{{ asset(config('pwa.push_badge', 'pwa/icons/badge-72.png')) }}">
 
     {{-- Styles --}}
     <link href="{{ asset('pwa/css/bootstrap.min.css') }}" rel="stylesheet">
@@ -56,10 +60,6 @@
             padding-top: 56px;
             padding-bottom: 60px;
             background: var(--pwa-body-bg);
-        }
-
-        a {
-            text-decoration: none;
         }
 
         /* ── Toolbars ──────────────────────────────────────────────── */

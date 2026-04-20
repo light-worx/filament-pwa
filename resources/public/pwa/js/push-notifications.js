@@ -12,6 +12,8 @@
     const APP_VERSION = document.querySelector('meta[name="app-version"]')?.content ?? '1.0.0';
     const PWA_BASE    = (document.querySelector('meta[name="pwa-base"]')?.content ?? '/app')
                         .replace(/\/$/, '');
+    const PUSH_ICON   = document.querySelector('meta[name="pwa-push-icon"]')?.content  ?? '/pwa/icons/icon-192.png';
+    const PUSH_BADGE  = document.querySelector('meta[name="pwa-push-badge"]')?.content ?? '/pwa/icons/badge-72.png';
 
     if (!VAPID_KEY) {
         console.warn('PWA: vapid-key meta tag missing. Push notifications will not work.');
@@ -218,10 +220,22 @@
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker
             .register('/service-worker.js?v=' + APP_VERSION)
-            .then(async () => {
-                // Run checkStatus immediately after SW registers so the push
-                // endpoint is written to localStorage as early as possible,
-                // giving the user-menu's resolveDeviceId() a head start.
+            .then(async registration => {
+                // Send app-configured icon paths to the SW so it can use them
+                // as fallbacks when a push payload doesn't include icon/badge.
+                const sw = registration.active
+                        ?? registration.waiting
+                        ?? registration.installing;
+                if (sw) {
+                    sw.postMessage({
+                        type:      'PWA_CONFIG',
+                        pushIcon:  PUSH_ICON,
+                        pushBadge: PUSH_BADGE,
+                    });
+                }
+
+                // Run checkStatus immediately so the push endpoint is written
+                // to localStorage as early as possible.
                 await checkStatus();
             })
             .catch(err => console.error('PWA: SW registration failed', err));
