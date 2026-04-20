@@ -12,22 +12,69 @@ class PushSubscriptionController extends Controller
 {
     /**
      * Store or update a push subscription.
+     *
+     * Merge strategy to avoid duplicate UserPreference rows:
+     *
+     * The browser generates a new push endpoint when subscribe() is called.
+     * If the user has already verified their phone (creating a UserPreference
+     * with a temporary device_id), we must link the new endpoint to that
+     * existing row rather than creating a second one.
+     *
+     * Resolution order:
+     *   1. Exact match on endpoint — subscription already exists, update it.
+     *   2. Match on cookie device_id — the user verified on this device using
+     *      a temporary id; adopt that row and update its device_id to the endpoint.
+     *   3. Match on verified phone — another device_id was used during verification;
+     *      adopt that row (most recent verified match wins).
+     *   4. No match — create a fresh UserPreference keyed on the endpoint.
      */
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'endpoint'        => 'required|string',
-            'keys.p256dh'     => 'required|string',
-            'keys.auth'       => 'required|string',
-            'expirationTime'  => 'nullable',
+            'endpoint'       => 'required|string',
+            'keys.p256dh'    => 'required|string',
+            'keys.auth'      => 'required|string',
+            'expirationTime' => 'nullable',
         ]);
 
-        $preference = UserPreference::firstOrCreate(
-            ['device_id' => $data['endpoint']]
-        );
+        $endpoint = $data['endpoint'];
+
+        // ── 1. Existing subscription for this endpoint ────────────────────
+        $existing = PushSubscription::where('endpoint', $endpoint)->first();
+        if ($existing?->preference) {
+            $preference = $existing->preference;
+        } else {
+            // ── 2. Cookie device_id match ─────────────────────────────────
+            $cookieDeviceId = $request->cookie('pwa_device_id');
+            $preference     = null;
+
+            if ($cookieDeviceId && $cookieDeviceId !== $endpoint) {
+                $preference = UserPreference::where('device_id', $cookieDeviceId)->first();
+            }
+
+            // ── 3. Verified phone match ───────────────────────────────────
+            if (!$preference) {
+                // Look for any verified preference that doesn't already have
+                // a push subscription attached to a different endpoint
+                $preference = UserPreference::where('phone_verified', true)
+                    ->whereNotNull('phone')
+                    ->whereDoesntHave('pushSubscriptions')
+                    ->latest()
+                    ->first();
+            }
+
+            // ── 4. Create fresh ───────────────────────────────────────────
+            if (!$preference) {
+                $preference = new UserPreference();
+            }
+
+            // Claim this endpoint as the canonical device_id for this preference
+            $preference->device_id = $endpoint;
+            $preference->save();
+        }
 
         PushSubscription::updateOrCreate(
-            ['endpoint' => $data['endpoint']],
+            ['endpoint' => $endpoint],
             [
                 'public_key'         => $data['keys']['p256dh'],
                 'auth_token'         => $data['keys']['auth'],
@@ -36,12 +83,15 @@ class PushSubscriptionController extends Controller
             ]
         );
 
-        return response()->json(['status' => 'subscribed']);
+        // Sync the endpoint into the response cookie so subsequent page loads
+        // have the correct device_id immediately
+        return response()
+            ->json(['status' => 'subscribed'])
+            ->cookie('pwa_device_id', $endpoint, 60 * 24 * 365, '/', null, false, false);
     }
 
     /**
      * Check whether a given endpoint is subscribed server-side.
-     * Called on page load to sync browser ↔ server state.
      */
     public function status(Request $request): JsonResponse
     {
@@ -56,7 +106,7 @@ class PushSubscriptionController extends Controller
         $phoneVerified = $subscription?->preference?->phone_verified ?? false;
 
         return response()->json([
-            'subscribed'    => $subscription !== null,
+            'subscribed'     => $subscription !== null,
             'phone_verified' => (bool) $phoneVerified,
         ]);
     }
@@ -90,7 +140,7 @@ class PushSubscriptionController extends Controller
     }
 
     /**
-     * Save or update preference fields for a device.
+     * Save or update custom settings for a device.
      */
     public function savePreferences(Request $request): JsonResponse
     {
@@ -108,8 +158,8 @@ class PushSubscriptionController extends Controller
 
         return response()->json([
             'status'        => 'saved',
-            'phone_verified'=> (bool) $preference->phone_verified,
-            'phone'         => $preference->phone,
+            'phone_verified' => (bool) $preference->phone_verified,
+            'phone'          => $preference->phone,
         ]);
     }
 
@@ -128,20 +178,39 @@ class PushSubscriptionController extends Controller
             return response()->json((object) []);
         }
 
-        // Resolve display name from the app's configured identity model
         $resolvedName = $preference->resolveIdentityName();
-        $notFoundMsg  = null;
-        if ($preference->phone_verified && !$resolvedName) {
-            $notFoundMsg = config('pwa.identity.not_found_message');
-        }
 
         return response()->json([
-            'resolved_name'       => $resolvedName,
-            'not_found_message'   => $notFoundMsg,
-            'phone'               => $preference->phone,
-            'phone_verified'      => (bool) $preference->phone_verified,
-            'custom_settings'     => $preference->custom_settings,
+            'phone'          => $preference->phone,
+            'phone_verified' => (bool) $preference->phone_verified,
+            'resolved_name'  => $resolvedName,
+            'custom_settings'=> $preference->custom_settings,
         ]);
     }
 
+    /**
+     * Toggle the preaching reminders opt-in for a device.
+     * Body: { device_id, enabled: true|false }
+     */
+    public function togglePreachingReminders(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'device_id' => 'required|string',
+            'enabled'   => 'present|boolean',
+        ]);
+
+        $preference = UserPreference::where('device_id', $data['device_id'])->first();
+
+        if (!$preference) {
+            return response()->json(['message' => 'Device not found.'], 404);
+        }
+
+        $preference->update(['preaching_reminders' => $data['enabled']]);
+        $preference->refresh();
+
+        return response()->json([
+            'status'              => 'ok',
+            'preaching_reminders' => (bool) $preference->preaching_reminders,
+        ]);
+    }
 }

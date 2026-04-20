@@ -6,7 +6,7 @@
     </button>
 
     {{-- Centre: app title --}}
-    <span class="fw-bold">{{ $title ?? config('pwa.app_name') }}</span>
+    <span class="fs-5 fw-bold">{{ $title ?? config('pwa.app_name') }}</span>
 
     {{-- Right: install + push + user --}}
     <div class="d-flex align-items-center gap-2">
@@ -15,13 +15,6 @@
         @if(config('pwa.install_prompt', true))
         <button id="installBtn" class="btn btn-outline-secondary btn-sm d-none" aria-label="Install app">
             <i class="bi bi-download"></i>
-        </button>
-        @endif
-
-        {{-- Push notification toggle (hidden until status known) --}}
-        @if(config('pwa.push.enabled', true))
-        <button id="enable-push" class="btn btn-sm d-none" aria-label="Enable push notifications">
-            <i class="bi bi-bell"></i>
         </button>
         @endif
 

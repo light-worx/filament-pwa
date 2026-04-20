@@ -185,53 +185,6 @@
 
     window.pushNotifications = { subscribe, unsubscribe, checkStatus };
 
-    // ── Top-bar push button ──────────────────────────────────────────────────
-
-    async function initTopBarPushButton() {
-        const btn = document.getElementById('enable-push');
-        if (!btn) return;
-
-        const status = await checkStatus();
-
-        if (!status.supported || status.subscribed) {
-            btn.classList.add('d-none');
-            return;
-        }
-
-        if (status.permission === 'denied') {
-            btn.innerHTML = '<i class="bi bi-bell-slash"></i>';
-            btn.title     = 'Notifications blocked — reset in browser settings';
-            btn.classList.remove('d-none');
-            btn.classList.add('btn-outline-secondary');
-            btn.disabled  = true;
-            return;
-        }
-
-        btn.innerHTML = '<i class="bi bi-bell"></i>';
-        btn.title     = 'Enable push notifications';
-        btn.classList.remove('d-none');
-        btn.classList.add('btn-outline-primary');
-
-        btn.addEventListener('click', async () => {
-            btn.disabled = true;
-            try {
-                await subscribe();
-                btn.classList.add('d-none');
-                window.showToast?.('Push notifications enabled');
-            } catch (e) {
-                console.warn('PWA: subscribe failed', e);
-                btn.disabled = false;
-                if (Notification.permission === 'denied') {
-                    btn.innerHTML = '<i class="bi bi-bell-slash"></i>';
-                    btn.title     = 'Notifications blocked — reset in browser settings';
-                    btn.classList.replace('btn-outline-primary', 'btn-outline-secondary');
-                    btn.disabled  = true;
-                }
-                window.showToast?.('Could not enable notifications', 'error');
-            }
-        });
-    }
-
     // ── Install prompt ───────────────────────────────────────────────────────
 
     let deferredInstallPrompt = null;
@@ -266,12 +219,10 @@
         navigator.serviceWorker
             .register('/service-worker.js?v=' + APP_VERSION)
             .then(async () => {
-                // Run checkStatus immediately after SW registers so it can
-                // write the push endpoint to localStorage as early as possible.
-                // initTopBarPushButton also calls checkStatus but this fires first
-                // and gives the user-menu's resolveDeviceId() a head start.
+                // Run checkStatus immediately after SW registers so the push
+                // endpoint is written to localStorage as early as possible,
+                // giving the user-menu's resolveDeviceId() a head start.
                 await checkStatus();
-                initTopBarPushButton();
             })
             .catch(err => console.error('PWA: SW registration failed', err));
     }
