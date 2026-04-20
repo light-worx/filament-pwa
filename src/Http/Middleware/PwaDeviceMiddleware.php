@@ -11,19 +11,13 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * PwaDeviceMiddleware
  *
- * Reads the pwa_device_id cookie written by push-notifications.js and
- * user-menu.blade.php, loads the corresponding UserPreference row, and
- * shares it with every view plus attaches it to the request.
- *
- * This replaces cookie-based workarounds like $_COOKIE['user_circuit'].
+ * Reads the pwa_device_id cookie (written by the JS layer), loads the
+ * corresponding UserPreference row, and makes it available to every
+ * controller and Blade view in the request lifecycle.
  *
  * ── Registration ─────────────────────────────────────────────────────────────
  *
- * Add to your app's HTTP kernel (app/Http/Kernel.php) in the 'web' group:
- *
- *   \Lightworx\FilamentPwa\Http\Middleware\PwaDeviceMiddleware::class,
- *
- * Or in Laravel 11+ bootstrap/app.php:
+ * Laravel 11+  (bootstrap/app.php):
  *
  *   ->withMiddleware(function (Middleware $middleware) {
  *       $middleware->web(append: [
@@ -31,27 +25,32 @@ use Symfony\Component\HttpFoundation\Response;
  *       ]);
  *   })
  *
- * ── Usage in controllers ──────────────────────────────────────────────────────
+ * Laravel 10  (app/Http/Kernel.php, 'web' group):
  *
- *   // The UserPreference for this device (null if not recognised)
+ *   \Lightworx\FilamentPwa\Http\Middleware\PwaDeviceMiddleware::class,
+ *
+ * ── In controllers ────────────────────────────────────────────────────────────
+ *
+ *   // The full UserPreference for this device, or null if unrecognised
  *   $preference = $request->pwaPreference;
  *
- *   // Shorthand helpers
- *   $circuitId = $request->pwaCircuitId;       // custom_settings.circuit_id
- *   $phone     = $request->pwaPhone;           // verified phone number or null
+ *   // Verified phone number, or null
+ *   $phone = $request->pwaPhone;
  *
- * ── Usage in Blade views ──────────────────────────────────────────────────────
+ *   // Any custom setting by key
+ *   $circuitId = $request->pwaPreference?->getSetting('circuit_id');
+ *   $region    = $request->pwaPreference?->getSetting('region');
  *
- *   {{-- All three are shared automatically --}}
+ * ── In Blade views ────────────────────────────────────────────────────────────
+ *
  *   @if($pwaPreference)
  *       Welcome, {{ $pwaPreference->name }}
  *   @endif
  *
- *   @if($pwaCircuitId)
- *       {{-- redirect or filter by circuit --}}
- *   @endif
- *
- *   <livewire:my-component :prefilledCircuit="$pwaCircuitId" :prefilledEmail="$pwaPreference?->email" />
+ *   <livewire:my-component
+ *       :circuit="$pwaPreference?->getSetting('circuit_id')"
+ *       :email="$pwaPreference?->email"
+ *   />
  */
 class PwaDeviceMiddleware
 {
@@ -64,16 +63,13 @@ class PwaDeviceMiddleware
             $preference = UserPreference::where('device_id', $deviceId)->first();
         }
 
-        // Attach to the request so controllers can type-hint or use $request->pwaPreference
-        $request->merge([]);   // ensure request is mutable
+        // Attach to request — accessible as $request->pwaPreference in controllers
         $request->pwaPreference = $preference;
-        $request->pwaCircuitId  = $preference?->getSetting('circuit_id');
-        $request->pwaPhone      = ($preference?->phone_verified ? $preference?->phone : null);
+        $request->pwaPhone      = ($preference?->phone_verified ? $preference->phone : null);
 
         // Share with all Blade views
         View::share('pwaPreference', $preference);
-        View::share('pwaCircuitId',  $preference?->getSetting('circuit_id'));
-        View::share('pwaPhone',      $preference?->phone_verified ? $preference?->phone : null);
+        View::share('pwaPhone',      $request->pwaPhone);
 
         return $next($request);
     }
