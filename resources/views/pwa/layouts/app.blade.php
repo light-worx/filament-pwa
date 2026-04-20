@@ -62,6 +62,10 @@
             background: var(--pwa-body-bg);
         }
 
+        a {
+            text-decoration: none;
+        }
+
         /* ── Toolbars ──────────────────────────────────────────────── */
         .top-toolbar {
             background: var(--pwa-toolbar-bg);
