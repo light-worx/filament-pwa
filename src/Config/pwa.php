@@ -226,9 +226,12 @@ return [
     |--------------------------------------------------------------------------
     */
     'picture_upload' => [
-        'disk' => env('PWA_PICTURE_DISK', 'public'),
-        'path' => env('PWA_PICTURE_PATH', 'pwa/avatars'),
-        // Max file size in kilobytes (default 2 MB)
+        // Filesystem disk to store uploaded pictures on (must be publicly accessible).
+        // For the 'public' disk run: php artisan storage:link
+        // The same disk is used to resolve display URLs for pictures stored as
+        // bare filenames/paths in the identity model's picture_field.
+        'disk'   => env('PWA_PICTURE_DISK', 'public'),
+        'path'   => env('PWA_PICTURE_PATH', 'pwa/avatars'),
         'max_kb' => env('PWA_PICTURE_MAX_KB', 2048),
     ],
 
@@ -255,9 +258,5 @@ return [
     */
     'push_icon'  => env('PWA_PUSH_ICON',  '/pwa/icons/icon-192.png'),
     'push_badge' => env('PWA_PUSH_BADGE', '/pwa/icons/badge-72.png'),
-    'screenshot' => env('PWA_SCREENSHOT', '/pwa/icons/screenshot.png'),
 
 ];
-
-
-    

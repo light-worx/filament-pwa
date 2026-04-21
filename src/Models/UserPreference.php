@@ -13,7 +13,6 @@ class UserPreference extends Model
         'phone_verification_pin',
         'pin_expires_at',
         'phone_verified',
-        'picture_path',
         'custom_settings',
     ];
 
@@ -112,29 +111,23 @@ class UserPreference extends Model
         $value = data_get($record, $config['picture_field']);
         if (!$value) return null;
 
-        // If it already looks like a URL, return it as-is
+        // Already a full URL — return as-is
         if (str_starts_with($value, 'http')) return $value;
 
-        // Otherwise treat as a public asset path
-        return asset($value);
+        // Stored as a bare filename or relative path on the upload disk.
+        // Use Storage::url() so it respects the disk's configured URL,
+        // e.g. APP_URL/storage/filename.jpg for the public disk.
+        $disk = config('pwa.picture_upload.disk', 'public');
+        return \Illuminate\Support\Facades\Storage::disk($disk)->url($value);
     }
 
     /**
-     * Resolve the profile picture URL to display, in priority order:
-     *   1. User-uploaded picture (stored in picture_path)
-     *   2. Picture from the identity model
-     *   3. null (caller should show a placeholder/initials avatar)
+     * Resolve the profile picture URL for display.
+     * The image always lives on the identity model — there is no separate
+     * per-device copy. This method simply delegates to lookupPictureForPhone.
      */
     public function resolveProfilePicture(): ?string
     {
-        // User-uploaded picture takes priority
-        if ($this->picture_path) {
-            return \Illuminate\Support\Facades\Storage::disk(
-                config('pwa.picture_upload.disk', 'public')
-            )->url($this->picture_path);
-        }
-
-        // Fall back to identity model picture
         return static::lookupPictureForPhone($this->phone);
     }
 
