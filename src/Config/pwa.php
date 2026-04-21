@@ -167,7 +167,7 @@ return [
     |
     | After a phone number is verified, the package looks up the user's name
     | from your app's own model. Configure the model class, the field that
-    | holds the phone number (must be stored in E.164: +27794999139), and
+    | holds the phone number (must be stored in E.164: +27820000000), and
     | the field (or dot-notation path) that holds the display name.
     |
     | not_found_message: shown in the user panel when the phone number is
@@ -180,6 +180,13 @@ return [
         'model'       => env('PWA_IDENTITY_MODEL', ''),
         'phone_field' => env('PWA_IDENTITY_PHONE', 'phone'),
         'name_field'  => env('PWA_IDENTITY_NAME',  'name'),   // dot-notation supported
+
+        // Dot-notation path on the identity model for a profile picture URL/path.
+        // Leave null if your model has no picture. Example: 'profile_picture'
+        // or 'avatar.url' for a related model.
+        // The value is treated as a URL if it starts with http, otherwise
+        // passed through asset() to build a public URL.
+        'picture_field' => env('PWA_IDENTITY_PICTURE', null),
 
         // When true, the SMS PIN is only sent if the phone number already exists
         // in the model above. Unknown numbers receive a 403 and no SMS is sent.
@@ -205,6 +212,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Profile picture uploads
+    |
+    | When a user uploads or takes a new profile picture via the PWA panel,
+    | it is stored using Laravel's filesystem. Configure the disk and the
+    | directory within that disk.
+    |
+    | disk — any disk defined in config/filesystems.php (default: 'public')
+    | path — subdirectory within the disk (default: 'pwa/avatars')
+    |
+    | The uploaded image is served via Storage::url() so ensure the disk
+    | is publicly accessible (run 'php artisan storage:link' for the public disk).
+    |--------------------------------------------------------------------------
+    */
+    'picture_upload' => [
+        'disk' => env('PWA_PICTURE_DISK', 'public'),
+        'path' => env('PWA_PICTURE_PATH', 'pwa/avatars'),
+        // Max file size in kilobytes (default 2 MB)
+        'max_kb' => env('PWA_PICTURE_MAX_KB', 2048),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Install prompt
     |--------------------------------------------------------------------------
     */
@@ -225,7 +254,10 @@ return [
     |--------------------------------------------------------------------------
     */
     'push_icon'  => env('PWA_PUSH_ICON',  '/pwa/icons/icon-192.png'),
-    'push_badge' => env('PWA_PUSH_BADGE', '/pwa/icons/icon-72.png'),
+    'push_badge' => env('PWA_PUSH_BADGE', '/pwa/icons/badge-72.png'),
     'screenshot' => env('PWA_SCREENSHOT', '/pwa/icons/screenshot.png'),
 
 ];
+
+
+    

@@ -144,13 +144,18 @@ class MessagesController extends Controller
         $data = $request->validate(['device_id' => 'required|string']);
 
         $preference = UserPreference::where('device_id', $data['device_id'])->first();
-        if (!$preference) {
+        if (!$preference || !$preference->phone_verified) {
             return response()->json(['unread' => 0, 'total' => 0]);
         }
 
-        $total  = PushMessage::where('user_preference_id', $preference->id)->count();
-        $unread = PushMessage::where('user_preference_id', $preference->id)
-                             ->where('seen', false)->count();
+        try {
+            $total  = PushMessage::where('user_preference_id', $preference->id)->count();
+            $unread = PushMessage::where('user_preference_id', $preference->id)
+                                 ->where('seen', false)->count();
+        } catch (\Throwable) {
+            // push_messages table may not exist yet on fresh installs
+            return response()->json(['unread' => 0, 'total' => 0]);
+        }
 
         return response()->json(['unread' => $unread, 'total' => $total]);
     }

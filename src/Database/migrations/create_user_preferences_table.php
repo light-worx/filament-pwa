@@ -18,6 +18,7 @@ return new class extends Migration
             $table->timestamp('pin_expires_at')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->boolean('phone_verified')->default(false);
+            $table->string('picture_path')->nullable();
             $table->timestamps();
         });
     }

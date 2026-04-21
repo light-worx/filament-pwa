@@ -118,6 +118,30 @@ if ($pwaDomain) {
     /* Identity card */
     .identity-name { font-size: 1rem; font-weight: 600; color: #111827; }
     .identity-phone { font-size: .78rem; color: #6b7280; }
+
+    /* Profile picture */
+    .profile-avatar {
+        width: 64px; height: 64px; border-radius: 50%;
+        object-fit: cover; flex-shrink: 0;
+        border: 2px solid #e5e7eb;
+        background: #f3f4f6;
+    }
+    .avatar-placeholder {
+        width: 64px; height: 64px; border-radius: 50%;
+        flex-shrink: 0; background: var(--pwa-accent, #3b82f6);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; font-weight: 700; color: #fff;
+        border: 2px solid #e5e7eb; cursor: pointer;
+    }
+    .avatar-wrap { position: relative; cursor: pointer; }
+    .avatar-wrap:hover .avatar-edit-hint { opacity: 1; }
+    .avatar-edit-hint {
+        position: absolute; inset: 0; border-radius: 50%;
+        background: rgba(0,0,0,.45); display: flex;
+        align-items: center; justify-content: center;
+        opacity: 0; transition: opacity .2s;
+    }
+    .avatar-edit-hint i { color: #fff; font-size: 1.1rem; }
     /* Push card at bottom */
     .push-card {
         border-top: 1px solid #f1f5f9;
@@ -147,23 +171,72 @@ if ($pwaDomain) {
     {{-- ── Identity card (shown once verified) ────────────────────────── --}}
     <div id="identity-card" class="card shadow-sm border-0 mb-3 d-none">
         <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div id="identity-name" class="identity-name mb-1"></div>
+            <div class="d-flex align-items-center gap-3">
+
+                {{-- Profile picture / initials placeholder --}}
+                <div class="avatar-wrap flex-shrink-0"
+                     id="avatar-wrap"
+                     title="Change profile picture"
+                     role="button" tabindex="0"
+                     aria-label="Change profile picture">
+                    {{-- Populated by JS --}}
+                    <div class="avatar-placeholder" id="avatar-placeholder">?</div>
+                    <img id="avatar-img" class="profile-avatar d-none" src="" alt="Profile picture">
+                    <div class="avatar-edit-hint">
+                        <i class="bi bi-camera-fill"></i>
+                    </div>
+                </div>
+
+                {{-- Name, phone, verified badge --}}
+                <div class="flex-grow-1 min-width-0">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <div id="identity-name" class="identity-name"></div>
+                        <span class="verified-badge bg-success-subtle text-success">
+                            <i class="bi bi-check-circle-fill me-1"></i>Verified
+                        </span>
+                    </div>
                     <div id="identity-phone" class="identity-phone"></div>
-                    {{-- Shown when the number isn't matched to a site user --}}
-                    <div id="identity-unknown" class="d-none mt-2">
+                    <div id="identity-unknown" class="d-none mt-1">
                         <small class="text-warning">
                             <i class="bi bi-exclamation-triangle me-1"></i>
                             {{ $unknownNumberMessage }}
                         </small>
                     </div>
                 </div>
-                <span class="verified-badge bg-success-subtle text-success flex-shrink-0">
-                    <i class="bi bi-check-circle-fill me-1"></i>Verified
-                </span>
             </div>
 
+            {{-- Hidden file input (triggered by avatar tap) --}}
+            <input type="file" id="avatar-file-input"
+                   accept="image/*"
+                   class="d-none">
+
+            {{-- Picture action bar (shown after avatar tap) --}}
+            <div id="avatar-action-bar" class="d-none mt-3 pt-3 border-top">
+                <div class="d-flex gap-2 flex-wrap">
+                    <button id="avatar-upload-btn"
+                            class="btn btn-outline-primary btn-sm flex-fill">
+                        <i class="bi bi-upload me-1"></i>Upload photo
+                    </button>
+                    <button id="avatar-camera-btn"
+                            class="btn btn-outline-secondary btn-sm flex-fill">
+                        <i class="bi bi-camera me-1"></i>Take photo
+                    </button>
+                    <button id="avatar-remove-btn"
+                            class="btn btn-outline-danger btn-sm d-none">
+                        <i class="bi bi-trash me-1"></i>Remove
+                    </button>
+                </div>
+                <button id="avatar-cancel-btn"
+                        class="btn btn-link btn-sm text-muted p-0 mt-1"
+                        style="font-size:.75rem">
+                    Cancel
+                </button>
+            </div>
+
+            {{-- Upload progress --}}
+            <div id="avatar-uploading" class="d-none mt-2 text-muted small">
+                <div class="spinner-border spinner-border-sm me-2"></div>Uploading…
+            </div>
         </div>
     </div>
 
@@ -418,7 +491,7 @@ if ($pwaDomain) {
             <a href="#" id="sign-out-link"
                class="text-muted"
                style="font-size:.72rem">
-                <i class="bi bi-box-arrow-right me-1"></i>Sign out
+                <i class="bi bi-box-arrow-right me-1"></i>Sign out / change number
             </a>
         </div>
     </div>
@@ -525,7 +598,7 @@ if ($pwaDomain) {
     const setV = (id, v) => { const el = $(id); if (el) el.value = v ?? ''; };
 
     // ── State ──────────────────────────────────────────────────────────────
-    let state = { phoneVerified: false, identityResolved: false };
+    let state = { phoneVerified: false, identityResolved: false, pictureUrl: null };
 
     // ── Apply state to UI ──────────────────────────────────────────────────
     function applyState() {
@@ -535,6 +608,7 @@ if ($pwaDomain) {
             // Show gated sections
             @if(!empty($customFields)) show('custom-fields-card'); @endif
             show('push-card');
+            loadInboxBadge();
             // Inbox only shown when identity is also resolved (name found)
             if (state.identityResolved) {
                 const inboxEl = document.getElementById('inbox-link');
@@ -585,6 +659,10 @@ if ($pwaDomain) {
                 } else {
                     hide('identity-unknown');
                 }
+
+                // Profile picture
+                state.pictureUrl = data.resolved_picture || null;
+                renderAvatar(state.pictureUrl, data.resolved_name || '');
 
                 // Restore custom fields
                 const custom = data.custom_settings ?? {};
@@ -831,6 +909,10 @@ if ($pwaDomain) {
                 hide('identity-unknown');
             }
 
+            // Profile picture (may not be set yet at verify time)
+            state.pictureUrl = data.resolved_picture || null;
+            renderAvatar(state.pictureUrl, data.resolved_name || '');
+
             setV('pin-input', '');
             applyState();
             window.showToast?.('Mobile number verified ✓');
@@ -950,13 +1032,149 @@ if ($pwaDomain) {
         } catch {}
     }
 
+    // ── Avatar rendering ───────────────────────────────────────────────────
+    function renderAvatar(url, name) {
+        const img  = $('avatar-img');
+        const ph   = $('avatar-placeholder');
+        const rmBtn = $('avatar-remove-btn');
+
+        if (url) {
+            if (img) {
+                img.src = url;
+                img.classList.remove('d-none');
+            }
+            if (ph) ph.classList.add('d-none');
+            if (rmBtn) rmBtn.classList.remove('d-none');  // can remove upload
+        } else {
+            if (img) img.classList.add('d-none');
+            if (ph) {
+                // Show initials
+                const initials = (name || '?')
+                    .split(' ')
+                    .map(w => w[0] ?? '')
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase();
+                ph.textContent = initials || '?';
+                ph.classList.remove('d-none');
+            }
+            if (rmBtn) rmBtn.classList.add('d-none');  // nothing to remove
+        }
+    }
+
+    // ── Profile picture upload ──────────────────────────────────────────────
+    function initAvatarUpload() {
+        const wrap       = $('avatar-wrap');
+        const actionBar  = $('avatar-action-bar');
+        const uploadBtn  = $('avatar-upload-btn');
+        const cameraBtn  = $('avatar-camera-btn');
+        const removeBtn  = $('avatar-remove-btn');
+        const cancelBtn  = $('avatar-cancel-btn');
+        const fileInput  = $('avatar-file-input');
+        const uploading  = $('avatar-uploading');
+
+        if (!wrap) return;
+
+        function showActionBar()  { show('avatar-action-bar'); }
+        function hideActionBar()  { hide('avatar-action-bar'); }
+
+        // Tap avatar to reveal action bar
+        wrap.addEventListener('click', showActionBar);
+        wrap.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') showActionBar(); });
+        cancelBtn?.addEventListener('click', hideActionBar);
+
+        // ── Upload from file ────────────────────────────────────────────
+        uploadBtn?.addEventListener('click', () => {
+            fileInput.removeAttribute('capture');
+            fileInput.click();
+        });
+
+        // ── Take photo with camera ──────────────────────────────────────
+        cameraBtn?.addEventListener('click', () => {
+            fileInput.setAttribute('capture', 'user');   // prefer front camera
+            fileInput.click();
+        });
+
+        // ── Handle selected file ────────────────────────────────────────
+        fileInput?.addEventListener('change', async function () {
+            const file = this.files?.[0];
+            if (!file) return;
+
+            hideActionBar();
+            show('avatar-uploading');
+
+            try {
+                const id   = await resolveDeviceId();
+                const form = new FormData();
+                form.append('device_id', id);
+                form.append('picture',   file);
+                form.append('_token',    CSRF);
+
+                const res = await fetch(PWA_BASE + '/profile/picture', {
+                    method:  'POST',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF },
+                    body:    form,
+                });
+
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.message || 'Upload failed');
+
+                state.pictureUrl = data.picture_url;
+                renderAvatar(state.pictureUrl, $('identity-name')?.textContent ?? '');
+                window.showToast?.('Profile picture updated');
+            } catch (e) {
+                window.showToast?.(e.message || 'Upload failed', 'error');
+            } finally {
+                hide('avatar-uploading');
+                this.value = '';   // allow re-selection of same file
+            }
+        });
+
+        // ── Remove uploaded picture ─────────────────────────────────────
+        removeBtn?.addEventListener('click', async () => {
+            if (!confirm('Remove your uploaded picture?')) return;
+            hideActionBar();
+            show('avatar-uploading');
+
+            try {
+                const id  = await resolveDeviceId();
+                const res = await fetch(PWA_BASE + '/profile/picture', {
+                    method:  'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': CSRF,
+                        'Accept':       'application/json',
+                    },
+                    body: JSON.stringify({ device_id: id }),
+                });
+
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.message || 'Remove failed');
+
+                state.pictureUrl = data.picture_url || null;
+                renderAvatar(state.pictureUrl, $('identity-name')?.textContent ?? '');
+                window.showToast?.('Picture removed');
+            } catch (e) {
+                window.showToast?.(e.message || 'Could not remove picture', 'error');
+            } finally {
+                hide('avatar-uploading');
+            }
+        });
+    }
+
     // ── Inbox badge ────────────────────────────────────────────────────────
     async function loadInboxBadge() {
+        // Only fetch when the phone is verified — avoids pointless requests
+        // (and 500s if the push_messages table doesn't exist yet) for
+        // unverified devices.
+        if (!state.phoneVerified) return;
+
         const badge   = $('um-unread-badge');
         const summary = $('um-msg-summary');
         if (!badge || !summary) return;
         try {
             const id  = await resolveDeviceId();
+            if (!id) return;
             const res = await fetch(PWA_BASE + '/messages/unread?device_id=' + encodeURIComponent(id), {
                 headers: { 'Accept': 'application/json' }
             });
@@ -975,14 +1193,15 @@ if ($pwaDomain) {
                 badge.classList.add('d-none');
                 summary.textContent = 'No messages yet';
             }
-        } catch {}
+        } catch { /* non-fatal — badge stays hidden */ }
     }
 
     // ── Boot ───────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
         initSearchableSelects();
+        initAvatarUpload();
         loadPreferences();
-        loadInboxBadge();
+        // loadInboxBadge is called from applyState() once phone_verified is known
 
         // SMS verification
         $('send-sms-pin-btn')?.addEventListener('click', sendSmsPin);

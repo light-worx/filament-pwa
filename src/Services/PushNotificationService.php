@@ -35,10 +35,10 @@ class PushNotificationService
      *
      * Usage:
      *   app(PushNotificationService::class)
-     *       ->toPhone('+27794999139', 'Hello', 'Your order is ready', '/orders/123');
+     *       ->toPhone('+27820000000', 'Hello', 'Your order is ready', '/orders/123');
      *
      *   // or via the facade:
-     *   PushNotification::toPhone('+27794999139', 'Hello', 'Your order is ready');
+     *   PushNotification::toPhone('+27820000000', 'Hello', 'Your order is ready');
      */
     public function toPhone(
         string  $phone,
@@ -69,7 +69,7 @@ class PushNotificationService
      * Send to multiple phone numbers in a single batch.
      *
      * Usage:
-     *   PushNotification::toPhones(['+27794999139', '+447911123456'], 'Alert', 'Message');
+     *   PushNotification::toPhones(['+27820000000', '+447911123456'], 'Alert', 'Message');
      */
     public function toPhones(
         array   $phones,

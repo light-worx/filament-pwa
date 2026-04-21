@@ -50,18 +50,26 @@
                      .replace(/\/$/, '');
 
     async function loadMessageBadge() {
-        // Wait for device id to be settled (same logic as user-menu)
+        // Only fetch for verified devices. First check the preferences endpoint
+        // which is cheap and tells us whether this device is verified.
+        // This prevents 500s on fresh installs where push_messages may not
+        // exist yet, and avoids noise for unverified users.
         let deviceId = localStorage.getItem('pwa_device_id');
-        if (!deviceId || !deviceId.startsWith('https://')) {
-            if ('serviceWorker' in navigator && 'PushManager' in window) {
-                for (let i = 0; i < 20; i++) {
-                    await new Promise(r => setTimeout(r, 100));
-                    deviceId = localStorage.getItem('pwa_device_id');
-                    if (deviceId && deviceId.startsWith('https://')) break;
-                }
-            }
-        }
+
+        // If no device id at all, nothing to do
         if (!deviceId) return;
+
+        // Quick verification check — reuse the preferences endpoint
+        try {
+            const prefRes = await fetch(
+                PWA_BASE + '/preferences?device_id=' + encodeURIComponent(deviceId),
+                { headers: { 'Accept': 'application/json' } }
+            );
+            if (!prefRes.ok) return;
+            const prefs = await prefRes.json();
+            // Only proceed if phone is verified
+            if (!prefs.phone_verified) return;
+        } catch { return; }
 
         try {
             const res = await fetch(
@@ -69,7 +77,7 @@
                 { headers: { 'Accept': 'application/json' } }
             );
             if (!res.ok) return;
-            const data = await res.json();
+            const data   = await res.json();
             const unread = data.unread ?? 0;
 
             badges.forEach(badge => {

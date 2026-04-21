@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Lightworx\FilamentPwa\Http\Controllers\FieldOptionsController;
 use Lightworx\FilamentPwa\Http\Controllers\MessagesController;
 use Lightworx\FilamentPwa\Http\Controllers\PushSubscriptionController;
+use Lightworx\FilamentPwa\Http\Controllers\ProfilePictureController;
 use Lightworx\FilamentPwa\Http\Controllers\VerificationController;
 
 /*
@@ -30,7 +31,9 @@ if ($domain) {
 
 Route::group($groupAttrs, function () {
 
-    Route::get('/', function () { return view('pwa::pages.home'); })->name('app.home');
+    Route::get(config('pwa.app_route', '/'), function () {
+        return view('pwa::pages.home');
+    })->name('app.home');
 
     // ── Push subscription lifecycle ───────────────────────────────────────────
     Route::post('/subscribe',           [PushSubscriptionController::class, 'store']);
@@ -49,6 +52,10 @@ Route::group($groupAttrs, function () {
     // ── SMS phone verification ────────────────────────────────────────────────
     Route::post('/verify/send-pin',     [VerificationController::class, 'sendPin']);
     Route::post('/verify/confirm-pin',  [VerificationController::class, 'verifyPin']);
+
+    // ── Profile picture ──────────────────────────────────────────────────────
+    Route::post('/profile/picture',         [ProfilePictureController::class, 'store']);
+    Route::delete('/profile/picture',       [ProfilePictureController::class, 'destroy']);
 
     // ── Messages inbox ────────────────────────────────────────────────────────
     Route::get('/messages',             [MessagesController::class, 'index'])->name('app.messages');
@@ -72,12 +79,12 @@ Route::get('/manifest.json', function () {
         'theme_color'      => config('pwa.theme.theme_color'),
         'icons'            => [
             [
-                'src'   => config('pwa.push_icon', '/pwa/icons/icon-192.png'),
+                'src'   => config('pwa.icon_192', '/pwa/icons/icon-192.png'),
                 'sizes' => '192x192',
                 'type'  => 'image/png',
             ],
             [
-                'src'   => config('pwa.push_icon', '/pwa/icons/icon-512.png'),
+                'src'   => config('pwa.icon_512', '/pwa/icons/icon-512.png'),
                 'sizes' => '512x512',
                 'type'  => 'image/png',
             ],
@@ -91,7 +98,7 @@ Route::get('/manifest.json', function () {
                 'description' => 'Home screen',
             ],
             [
-                'src'         => config('pwa.push_icon', '/pwa/icons/icon-512.png'),
+                'src'         => config('pwa.icon_512', '/pwa/icons/icon-512.png'),
                 'sizes'       => '512x512',
                 'type'        => 'image/png',
                 'description' => 'App icon',

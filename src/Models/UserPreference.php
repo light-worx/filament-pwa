@@ -13,6 +13,7 @@ class UserPreference extends Model
         'phone_verification_pin',
         'pin_expires_at',
         'phone_verified',
+        'picture_path',
         'custom_settings',
     ];
 
@@ -83,11 +84,58 @@ class UserPreference extends Model
             ->where($config['phone_field'], $phone)
             ->first();
 
-        if (!$record) {
+        if (!$record) return null;
+
+        return data_get($record, $config['name_field'] ?? 'name');
+    }
+
+    /**
+     * Look up the profile picture URL from the app's identity model.
+     * Returns null when no picture_field is configured or the record has no image.
+     */
+    public static function lookupPictureForPhone(?string $phone): ?string
+    {
+        if (!$phone) return null;
+
+        $config = config('pwa.identity');
+        if (empty($config['model']) || empty($config['phone_field'])
+            || empty($config['picture_field'])) {
             return null;
         }
 
-        return data_get($record, $config['name_field'] ?? 'name');
+        $record = app($config['model'])
+            ->where($config['phone_field'], $phone)
+            ->first();
+
+        if (!$record) return null;
+
+        $value = data_get($record, $config['picture_field']);
+        if (!$value) return null;
+
+        // If it already looks like a URL, return it as-is
+        if (str_starts_with($value, 'http')) return $value;
+
+        // Otherwise treat as a public asset path
+        return asset($value);
+    }
+
+    /**
+     * Resolve the profile picture URL to display, in priority order:
+     *   1. User-uploaded picture (stored in picture_path)
+     *   2. Picture from the identity model
+     *   3. null (caller should show a placeholder/initials avatar)
+     */
+    public function resolveProfilePicture(): ?string
+    {
+        // User-uploaded picture takes priority
+        if ($this->picture_path) {
+            return \Illuminate\Support\Facades\Storage::disk(
+                config('pwa.picture_upload.disk', 'public')
+            )->url($this->picture_path);
+        }
+
+        // Fall back to identity model picture
+        return static::lookupPictureForPhone($this->phone);
     }
 
     /**
