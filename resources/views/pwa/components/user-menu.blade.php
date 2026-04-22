@@ -638,6 +638,13 @@ if ($pwaDomain) {
             if (!res.ok) return;
             const data = await res.json();
 
+            console.debug('[PWA] preferences response', {
+                device_id:        id,
+                phone_verified:   data.phone_verified,
+                resolved_name:    data.resolved_name,
+                resolved_picture: data.resolved_picture,
+            });
+
             state.phoneVerified    = !!data.phone_verified;
             state.identityResolved = !!data.phone_verified && !!data.resolved_name;
 
