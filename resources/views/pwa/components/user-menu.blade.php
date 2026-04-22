@@ -1116,22 +1116,29 @@ if ($pwaDomain) {
                 img.onload = () => {
                     URL.revokeObjectURL(url);
 
-                    // Calculate target dimensions
-                    let { width, height } = img;
-                    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
-                        if (width >= height) {
-                            height = Math.round(height * MAX_DIMENSION / width);
-                            width  = MAX_DIMENSION;
-                        } else {
-                            width  = Math.round(width * MAX_DIMENSION / height);
-                            height = MAX_DIMENSION;
-                        }
-                    }
+                    const srcW = img.naturalWidth;
+                    const srcH = img.naturalHeight;
+
+                    // ── Crop to centre square in source coordinates ───────
+                    const srcSize = Math.min(srcW, srcH);
+                    const srcX    = Math.floor((srcW - srcSize) / 2);
+                    const srcY    = Math.floor((srcH - srcSize) / 2);
+
+                    // ── Scale the square down if it exceeds MAX_DIMENSION ─
+                    const destSize = Math.min(srcSize, MAX_DIMENSION);
 
                     const canvas  = document.createElement('canvas');
-                    canvas.width  = width;
-                    canvas.height = height;
-                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    canvas.width  = destSize;
+                    canvas.height = destSize;
+
+                    // drawImage(src, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
+                    // Crops the centre square from the source and draws it into
+                    // the full (square) canvas in one step.
+                    canvas.getContext('2d').drawImage(
+                        img,
+                        srcX, srcY, srcSize, srcSize,  // source crop
+                        0,    0,    destSize, destSize  // destination
+                    );
 
                     // Try JPEG at decreasing quality until it fits
                     const qualities = [0.85, 0.75, 0.65, 0.55, 0.45];
