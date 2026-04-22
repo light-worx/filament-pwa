@@ -79,12 +79,12 @@ Route::get('/manifest.json', function () {
         'theme_color'      => config('pwa.theme.theme_color'),
         'icons'            => [
             [
-                'src'   => config('pwa.icon_192', '/pwa/icons/icon-192.png'),
+                'src'   => config('pwa.push_icon', '/pwa/icons/icon-192.png'),
                 'sizes' => '192x192',
                 'type'  => 'image/png',
             ],
             [
-                'src'   => config('pwa.icon_512', '/pwa/icons/icon-512.png'),
+                'src'   => config('pwa.push_icon', '/pwa/icons/icon-512.png'),
                 'sizes' => '512x512',
                 'type'  => 'image/png',
             ],
@@ -98,7 +98,7 @@ Route::get('/manifest.json', function () {
                 'description' => 'Home screen',
             ],
             [
-                'src'         => config('pwa.icon_512', '/pwa/icons/icon-512.png'),
+                'src'         => config('pwa.push_icon', '/pwa/icons/icon-512.png'),
                 'sizes'       => '512x512',
                 'type'        => 'image/png',
                 'description' => 'App icon',
