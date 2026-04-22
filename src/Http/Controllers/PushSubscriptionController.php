@@ -178,13 +178,24 @@ class PushSubscriptionController extends Controller
             return response()->json((object) []);
         }
 
-        $resolvedName = $preference->resolveIdentityName();
+        // Resolve picture separately so a misconfiguration never
+        // prevents the rest of the preferences from being returned.
+        try {
+            $picture = $preference->resolveProfilePicture();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('PWA: could not resolve profile picture', [
+                'phone' => $preference->phone,
+                'error' => $e->getMessage(),
+            ]);
+            $picture = null;
+        }
 
         return response()->json([
-            'phone'          => $preference->phone,
-            'phone_verified' => (bool) $preference->phone_verified,
-            'resolved_name'  => $resolvedName,
-            'custom_settings'=> $preference->custom_settings,
+            'phone'           => $preference->phone,
+            'phone_verified'  => (bool) $preference->phone_verified,
+            'resolved_name'   => $preference->resolveIdentityName(),
+            'resolved_picture'=> $picture,
+            'custom_settings' => $preference->custom_settings,
         ]);
     }
 

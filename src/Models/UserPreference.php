@@ -117,8 +117,15 @@ class UserPreference extends Model
         // Stored as a bare filename or relative path on the upload disk.
         // Use Storage::url() so it respects the disk's configured URL,
         // e.g. APP_URL/storage/filename.jpg for the public disk.
-        $disk = config('pwa.picture_upload.disk', 'public');
-        return \Illuminate\Support\Facades\Storage::disk($disk)->url($value);
+        // Fall back to 'public' if picture_upload config is not published.
+        $disk = config('pwa.picture_upload.disk') ?: 'public';
+
+        try {
+            return \Illuminate\Support\Facades\Storage::disk($disk)->url($value);
+        } catch (\Throwable) {
+            // Disk misconfigured — return a best-effort asset() URL as fallback
+            return asset('storage/' . ltrim($value, '/'));
+        }
     }
 
     /**
