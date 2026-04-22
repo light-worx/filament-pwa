@@ -232,7 +232,8 @@ return [
         // bare filenames/paths in the identity model's picture_field.
         'disk'   => env('PWA_PICTURE_DISK', 'public'),
         'path'   => env('PWA_PICTURE_PATH', 'pwa/avatars'),
-        'max_kb' => env('PWA_PICTURE_MAX_KB', 2048),
+        // Server-side limit as a safety net — client compresses before upload.
+        'max_kb' => env('PWA_PICTURE_MAX_KB', 3072),
     ],
 
     /*

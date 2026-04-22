@@ -1102,6 +1102,56 @@ if ($pwaDomain) {
             fileInput.click();
         });
 
+        // ── Compress image using Canvas before upload ──────────────────
+        // Resizes to a max dimension of 1200px and encodes as JPEG at
+        // decreasing quality until the file fits within the server limit.
+        async function compressImage(file) {
+            const MAX_DIMENSION = 1200;
+            const MAX_BYTES     = {{ (int) config('pwa.picture_upload.max_kb', 2048) * 1024 }};
+
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const url = URL.createObjectURL(file);
+
+                img.onload = () => {
+                    URL.revokeObjectURL(url);
+
+                    // Calculate target dimensions
+                    let { width, height } = img;
+                    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+                        if (width >= height) {
+                            height = Math.round(height * MAX_DIMENSION / width);
+                            width  = MAX_DIMENSION;
+                        } else {
+                            width  = Math.round(width * MAX_DIMENSION / height);
+                            height = MAX_DIMENSION;
+                        }
+                    }
+
+                    const canvas  = document.createElement('canvas');
+                    canvas.width  = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+                    // Try JPEG at decreasing quality until it fits
+                    const qualities = [0.85, 0.75, 0.65, 0.55, 0.45];
+                    for (const q of qualities) {
+                        const dataUrl  = canvas.toDataURL('image/jpeg', q);
+                        const bytes    = Math.round((dataUrl.length - 'data:image/jpeg;base64,'.length) * 0.75);
+                        if (bytes <= MAX_BYTES) {
+                            resolve(dataUrl);
+                            return;
+                        }
+                    }
+                    // Last resort — lowest quality
+                    resolve(canvas.toDataURL('image/jpeg', 0.35));
+                };
+
+                img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
+                img.src = url;
+            });
+        }
+
         // ── Handle selected file ────────────────────────────────────────
         fileInput?.addEventListener('change', async function () {
             const file = this.files?.[0];
@@ -1111,16 +1161,17 @@ if ($pwaDomain) {
             show('avatar-uploading');
 
             try {
-                const id   = await resolveDeviceId();
-                const form = new FormData();
-                form.append('device_id', id);
-                form.append('picture',   file);
-                form.append('_token',    CSRF);
+                const id      = await resolveDeviceId();
+                const dataUrl = await compressImage(file);
 
                 const res = await fetch(PWA_BASE + '/profile/picture', {
                     method:  'POST',
-                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF },
-                    body:    form,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept':       'application/json',
+                        'X-CSRF-TOKEN': CSRF,
+                    },
+                    body: JSON.stringify({ device_id: id, picture_data: dataUrl }),
                 });
 
                 const data = await res.json().catch(() => ({}));

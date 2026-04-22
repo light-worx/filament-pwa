@@ -30,8 +30,12 @@ class ProfilePictureController extends Controller
 
         $data = $request->validate([
             'device_id'    => 'required|string',
+            // picture_data is a base64 data URI, always sent after client-side compression.
+            // We validate the string length rather than using the 'image' rule (which
+            // only works on uploaded files). String length cap = maxKb * 1.37 to account
+            // for base64 overhead (~137% of raw bytes) plus the data URI prefix.
             'picture'      => "nullable|image|max:{$maxKb}",
-            'picture_data' => 'nullable|string',
+            'picture_data' => 'nullable|string|max:' . (int) ($maxKb * 1400),
         ]);
 
         $preference = UserPreference::where('device_id', $data['device_id'])->first();
