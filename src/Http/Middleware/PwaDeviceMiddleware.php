@@ -5,15 +5,16 @@ namespace Lightworx\FilamentPwa\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\View;
-use Lightworx\FilamentPwa\Models\UserPreference;
+use Lightworx\FilamentPwa\Models\UserDevice;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * PwaDeviceMiddleware
  *
  * Reads the pwa_device_id cookie (written by the JS layer), loads the
- * corresponding UserPreference row, and makes it available to every
- * controller and Blade view in the request lifecycle.
+ * corresponding UserDevice row, then resolves the linked UserPreference
+ * (person-level settings) and makes both available to every controller
+ * and Blade view for the duration of the request.
  *
  * ── Registration ─────────────────────────────────────────────────────────────
  *
@@ -31,7 +32,10 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * ── In controllers ────────────────────────────────────────────────────────────
  *
- *   // The full UserPreference for this device, or null if unrecognised
+ *   // The UserDevice for this browser instance, or null if unrecognised
+ *   $device = $request->pwaDevice;
+ *
+ *   // The shared UserPreference (person-level settings), or null
  *   $preference = $request->pwaPreference;
  *
  *   // Verified phone number, or null
@@ -39,7 +43,6 @@ use Symfony\Component\HttpFoundation\Response;
  *
  *   // Any custom setting by key
  *   $circuitId = $request->pwaPreference?->getSetting('circuit_id');
- *   $region    = $request->pwaPreference?->getSetting('region');
  *
  * ── In Blade views ────────────────────────────────────────────────────────────
  *
@@ -56,18 +59,23 @@ class PwaDeviceMiddleware
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $deviceId   = $request->cookie('pwa_device_id');
+        $deviceId  = $request->cookie('pwa_device_id');
+        $device     = null;
         $preference = null;
 
         if ($deviceId) {
-            $preference = UserPreference::where('device_id', $deviceId)->first();
+            // Load device and eagerly resolve the shared person-level preference
+            $device     = UserDevice::with('preference')->where('device_id', $deviceId)->first();
+            $preference = $device?->preference;
         }
 
-        // Attach to request — accessible as $request->pwaPreference in controllers
+        // Attach to request — accessible in controllers
+        $request->pwaDevice     = $device;
         $request->pwaPreference = $preference;
         $request->pwaPhone      = ($preference?->phone_verified ? $preference->phone : null);
 
         // Share with all Blade views
+        View::share('pwaDevice',     $device);
         View::share('pwaPreference', $preference);
         View::share('pwaPhone',      $request->pwaPhone);
 

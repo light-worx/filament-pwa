@@ -6,6 +6,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Lightworx\FilamentPwa\Models\PushSubscription;
+use Lightworx\FilamentPwa\Models\UserDevice;
 use Lightworx\FilamentPwa\Models\UserPreference;
 
 class PushSubscriptionController extends Controller
@@ -13,20 +14,19 @@ class PushSubscriptionController extends Controller
     /**
      * Store or update a push subscription.
      *
-     * Merge strategy to avoid duplicate UserPreference rows:
-     *
-     * The browser generates a new push endpoint when subscribe() is called.
-     * If the user has already verified their phone (creating a UserPreference
-     * with a temporary device_id), we must link the new endpoint to that
-     * existing row rather than creating a second one.
+     * The browser push endpoint is used as the canonical device_id.
+     * When the browser calls subscribe() it may already have a temporary
+     * device_id (a local UUID set before push was granted). We must carry
+     * over the verified phone link from that temporary device to the new
+     * endpoint-based device rather than creating an orphaned second device.
      *
      * Resolution order:
-     *   1. Exact match on endpoint — subscription already exists, update it.
-     *   2. Match on cookie device_id — the user verified on this device using
-     *      a temporary id; adopt that row and update its device_id to the endpoint.
-     *   3. Match on verified phone — another device_id was used during verification;
-     *      adopt that row (most recent verified match wins).
-     *   4. No match — create a fresh UserPreference keyed on the endpoint.
+     *   1. Exact endpoint match — subscription already exists, update keys only.
+     *   2. Cookie device_id match — user verified on this device using a
+     *      temporary id; update that UserDevice's device_id to the endpoint.
+     *   3. Verified phone match — verification happened on a different device
+     *      (e.g. desktop verified, mobile now subscribing); reuse the preference.
+     *   4. No match — create a fresh UserDevice (unlinked until verification).
      */
     public function store(Request $request): JsonResponse
     {
@@ -40,51 +40,67 @@ class PushSubscriptionController extends Controller
         $endpoint = $data['endpoint'];
 
         // ── 1. Existing subscription for this endpoint ────────────────────
-        $existing = PushSubscription::where('endpoint', $endpoint)->first();
-        if ($existing?->preference) {
-            $preference = $existing->preference;
+        $existingSubscription = PushSubscription::where('endpoint', $endpoint)
+            ->with('device.preference')
+            ->first();
+
+        if ($existingSubscription?->device) {
+            $device = $existingSubscription->device;
         } else {
             // ── 2. Cookie device_id match ─────────────────────────────────
             $cookieDeviceId = $request->cookie('pwa_device_id');
-            $preference     = null;
+            $device         = null;
 
             if ($cookieDeviceId && $cookieDeviceId !== $endpoint) {
-                $preference = UserPreference::where('device_id', $cookieDeviceId)->first();
+                $device = UserDevice::where('device_id', $cookieDeviceId)->first();
+
+                if ($device) {
+                    // Promote the temporary device_id to the real push endpoint
+                    $device->device_id = $endpoint;
+                    $device->save();
+                }
             }
 
             // ── 3. Verified phone match ───────────────────────────────────
-            if (!$preference) {
-                // Look for any verified preference that doesn't already have
-                // a push subscription attached to a different endpoint
+            if (! $device) {
+                // Find a verified preference that has no device already using
+                // this endpoint — pick the most recent one
                 $preference = UserPreference::where('phone_verified', true)
                     ->whereNotNull('phone')
-                    ->whereDoesntHave('pushSubscriptions')
+                    ->whereDoesntHave('devices.pushSubscriptions', function ($q) use ($endpoint) {
+                        $q->where('endpoint', '!=', $endpoint);
+                    })
                     ->latest()
                     ->first();
+
+                if ($preference) {
+                    // Create a new device linked to this existing preference
+                    $device = UserDevice::create([
+                        'user_preference_id' => $preference->id,
+                        'device_id'          => $endpoint,
+                    ]);
+                }
             }
 
-            // ── 4. Create fresh ───────────────────────────────────────────
-            if (!$preference) {
-                $preference = new UserPreference();
+            // ── 4. Fresh unlinked device ──────────────────────────────────
+            if (! $device) {
+                $device = UserDevice::create([
+                    'user_preference_id' => null,
+                    'device_id'          => $endpoint,
+                ]);
             }
-
-            // Claim this endpoint as the canonical device_id for this preference
-            $preference->device_id = $endpoint;
-            $preference->save();
         }
 
         PushSubscription::updateOrCreate(
             ['endpoint' => $endpoint],
             [
-                'public_key'         => $data['keys']['p256dh'],
-                'auth_token'         => $data['keys']['auth'],
-                'content_encoding'   => 'aesgcm',
-                'user_preference_id' => $preference->id,
+                'public_key'       => $data['keys']['p256dh'],
+                'auth_token'       => $data['keys']['auth'],
+                'content_encoding' => 'aesgcm',
+                'user_device_id'   => $device->id,
             ]
         );
 
-        // Sync the endpoint into the response cookie so subsequent page loads
-        // have the correct device_id immediately
         return response()
             ->json(['status' => 'subscribed'])
             ->cookie('pwa_device_id', $endpoint, 60 * 24 * 365, '/', null, false, false);
@@ -100,10 +116,10 @@ class PushSubscriptionController extends Controller
         ]);
 
         $subscription = PushSubscription::where('endpoint', $data['endpoint'])
-            ->with('preference')
+            ->with('device.preference')
             ->first();
 
-        $phoneVerified = $subscription?->preference?->phone_verified ?? false;
+        $phoneVerified = $subscription?->device?->preference?->phone_verified ?? false;
 
         return response()->json([
             'subscribed'     => $subscription !== null,
@@ -116,9 +132,7 @@ class PushSubscriptionController extends Controller
      */
     public function destroy(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'endpoint' => 'required|string',
-        ]);
+        $data = $request->validate(['endpoint' => 'required|string']);
 
         PushSubscription::where('endpoint', $data['endpoint'])->delete();
 
@@ -130,9 +144,7 @@ class PushSubscriptionController extends Controller
      */
     public function expire(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'endpoint' => 'required|string',
-        ]);
+        $data = $request->validate(['endpoint' => 'required|string']);
 
         PushSubscription::where('endpoint', $data['endpoint'])->delete();
 
@@ -141,6 +153,8 @@ class PushSubscriptionController extends Controller
 
     /**
      * Save or update custom settings for a device.
+     * Settings are stored on UserPreference (shared across all devices for
+     * this person), so a change here is immediately visible on every device.
      */
     public function savePreferences(Request $request): JsonResponse
     {
@@ -149,12 +163,27 @@ class PushSubscriptionController extends Controller
             'custom_settings' => 'nullable|array',
         ]);
 
-        $preference = UserPreference::updateOrCreate(
-            ['device_id' => $data['device_id']],
-            [
+        $device = UserDevice::with('preference')->where('device_id', $data['device_id'])->first();
+
+        if (! $device) {
+            // Device not yet registered — create it unlinked; settings cannot
+            // be persisted until the device is linked via phone verification.
+            UserDevice::create(['device_id' => $data['device_id']]);
+            return response()->json(['status' => 'saved', 'phone_verified' => false, 'phone' => null]);
+        }
+
+        if ($device->preference) {
+            // Update the shared preference — affects all linked devices
+            $device->preference->update(['custom_settings' => $data['custom_settings'] ?? null]);
+            $preference = $device->preference->fresh();
+        } else {
+            // Device exists but hasn't been verified yet — store a stub preference
+            $preference = UserPreference::create([
                 'custom_settings' => $data['custom_settings'] ?? null,
-            ]
-        );
+            ]);
+            $device->user_preference_id = $preference->id;
+            $device->save();
+        }
 
         return response()->json([
             'status'        => 'saved',
@@ -168,18 +197,15 @@ class PushSubscriptionController extends Controller
      */
     public function getPreferences(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'device_id' => 'required|string',
-        ]);
+        $data = $request->validate(['device_id' => 'required|string']);
 
-        $preference = UserPreference::where('device_id', $data['device_id'])->first();
+        $device = UserDevice::with('preference')->where('device_id', $data['device_id'])->first();
+        $preference = $device?->preference;
 
-        if (!$preference) {
+        if (! $preference) {
             return response()->json((object) []);
         }
 
-        // Resolve picture separately so a misconfiguration never
-        // prevents the rest of the preferences from being returned.
         try {
             $picture = $preference->resolveProfilePicture();
         } catch (\Throwable $e) {
@@ -191,17 +217,20 @@ class PushSubscriptionController extends Controller
         }
 
         return response()->json([
-            'phone'           => $preference->phone,
-            'phone_verified'  => (bool) $preference->phone_verified,
-            'resolved_name'   => $preference->resolveIdentityName(),
-            'resolved_picture'=> $picture,
-            'custom_settings' => $preference->custom_settings,
+            'phone'            => $preference->phone,
+            'phone_verified'   => (bool) $preference->phone_verified,
+            'resolved_name'    => $preference->resolveIdentityName(),
+            'resolved_picture' => $picture,
+            'custom_settings'  => $preference->custom_settings,
         ]);
     }
 
     /**
      * Toggle the preaching reminders opt-in for a device.
      * Body: { device_id, enabled: true|false }
+     *
+     * Because this writes to UserPreference, toggling on one device
+     * automatically applies to all other devices for the same person.
      */
     public function togglePreachingReminders(Request $request): JsonResponse
     {
@@ -210,18 +239,19 @@ class PushSubscriptionController extends Controller
             'enabled'   => 'present|boolean',
         ]);
 
-        $preference = UserPreference::where('device_id', $data['device_id'])->first();
+        $device = UserDevice::with('preference')->where('device_id', $data['device_id'])->first();
+        $preference = $device?->preference;
 
-        if (!$preference) {
-            return response()->json(['message' => 'Device not found.'], 404);
+        if (! $preference) {
+            return response()->json(['message' => 'Device not found or not yet verified.'], 404);
         }
 
-        $preference->update(['preaching_reminders' => $data['enabled']]);
-        $preference->refresh();
+        $preference->setSetting('preaching_reminders', (bool) $data['enabled']);
+        $preference->save();
 
         return response()->json([
             'status'              => 'ok',
-            'preaching_reminders' => (bool) $preference->preaching_reminders,
+            'preaching_reminders' => (bool) $preference->getSetting('preaching_reminders'),
         ]);
     }
 }

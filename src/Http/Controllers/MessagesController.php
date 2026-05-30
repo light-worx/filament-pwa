@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\View\View;
 use Lightworx\FilamentPwa\Models\PushMessage;
-use Lightworx\FilamentPwa\Models\UserPreference;
+use Lightworx\FilamentPwa\Models\UserDevice;
 use Lightworx\FilamentPwa\Services\PushNotificationService;
 
 class MessagesController extends Controller
@@ -19,24 +19,40 @@ class MessagesController extends Controller
         return view('pwa::pages.messages');
     }
 
+    // ── Private helper ────────────────────────────────────────────────────────
+
+    /**
+     * Resolve the UserPreference for a device_id, or return null.
+     * All API methods in this controller use this to find the shared
+     * person-level record that owns the messages.
+     */
+    private function preferenceForDevice(string $deviceId): ?\Lightworx\FilamentPwa\Models\UserPreference
+    {
+        return UserDevice::with('preference')
+            ->where('device_id', $deviceId)
+            ->first()
+            ?->preference;
+    }
+
     // ── API ───────────────────────────────────────────────────────────────────
 
     /**
-     * Return all messages for the calling device, newest first.
+     * Return all messages for the calling device's person, newest first.
+     * Because messages are keyed to UserPreference (person), all devices
+     * for the same person see the same inbox.
      */
     public function list(Request $request): JsonResponse
     {
-        $data = $request->validate(['device_id' => 'required|string']);
+        $data       = $request->validate(['device_id' => 'required|string']);
+        $preference = $this->preferenceForDevice($data['device_id']);
 
-        $preference = UserPreference::where('device_id', $data['device_id'])->first();
-
-        if (!$preference) {
+        if (! $preference) {
             return response()->json(['messages' => [], 'unread' => 0]);
         }
 
         $messages = PushMessage::where('user_preference_id', $preference->id)
             ->orderByDesc('created_at')
-            ->get(['id','title','message','sender_name','sender_phone','seen','created_at']);
+            ->get(['id', 'title', 'message', 'sender_name', 'sender_phone', 'seen', 'created_at']);
 
         return response()->json([
             'messages' => $messages,
@@ -57,8 +73,8 @@ class MessagesController extends Controller
             'seen'      => 'required|boolean',
         ]);
 
-        $preference = UserPreference::where('device_id', $data['device_id'])->first();
-        if (!$preference) return response()->json(['status' => 'ok']);
+        $preference = $this->preferenceForDevice($data['device_id']);
+        if (! $preference) return response()->json(['status' => 'ok']);
 
         PushMessage::where('user_preference_id', $preference->id)
             ->whereIn('id', $data['ids'])
@@ -79,8 +95,8 @@ class MessagesController extends Controller
             'ids.*'     => 'integer',
         ]);
 
-        $preference = UserPreference::where('device_id', $data['device_id'])->first();
-        if (!$preference) return response()->json(['status' => 'ok']);
+        $preference = $this->preferenceForDevice($data['device_id']);
+        if (! $preference) return response()->json(['status' => 'ok']);
 
         PushMessage::where('user_preference_id', $preference->id)
             ->whereIn('id', $data['ids'])
@@ -102,19 +118,19 @@ class MessagesController extends Controller
             'body'       => 'required|string|max:1000',
         ]);
 
-        $preference = UserPreference::where('device_id', $data['device_id'])->first();
-        if (!$preference) {
+        $preference = $this->preferenceForDevice($data['device_id']);
+        if (! $preference) {
             return response()->json(['message' => 'Device not found.'], 404);
         }
 
         $original = PushMessage::where('user_preference_id', $preference->id)
             ->find($data['message_id']);
 
-        if (!$original) {
+        if (! $original) {
             return response()->json(['message' => 'Message not found.'], 404);
         }
 
-        if (!$original->sender_phone) {
+        if (! $original->sender_phone) {
             return response()->json(['message' => 'This message has no sender phone — cannot reply.'], 422);
         }
 
@@ -141,10 +157,10 @@ class MessagesController extends Controller
      */
     public function unreadCount(Request $request): JsonResponse
     {
-        $data = $request->validate(['device_id' => 'required|string']);
+        $data       = $request->validate(['device_id' => 'required|string']);
+        $preference = $this->preferenceForDevice($data['device_id']);
 
-        $preference = UserPreference::where('device_id', $data['device_id'])->first();
-        if (!$preference || !$preference->phone_verified) {
+        if (! $preference || ! $preference->phone_verified) {
             return response()->json(['unread' => 0, 'total' => 0]);
         }
 
