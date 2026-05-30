@@ -1,18 +1,18 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('user_preferences', function ($table) {
+        Schema::create('user_preferences', function (Blueprint $table) {
             $table->id();
-            $table->string('device_id')->nullable()->unique()->comment('Push endpoint or local UUID');
             $table->string('name')->nullable();
             $table->string('email')->nullable();
-            $table->string('phone', 50)->nullable();
+            $table->string('phone', 50)->nullable()->unique()->comment('Natural key — one preference record per phone number');
             $table->json('custom_settings')->nullable()->comment('Developer-defined extra fields');
             $table->string('phone_verification_pin', 4)->nullable();
             $table->timestamp('pin_expires_at')->nullable();

@@ -2,14 +2,27 @@
 
 namespace Lightworx\FilamentPwa\Services;
 
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
 use Lightworx\FilamentPwa\Models\PushMessage;
-use Lightworx\FilamentPwa\Models\PushSubscription;
+use Lightworx\FilamentPwa\Models\UserDevice;
 use Lightworx\FilamentPwa\Models\UserPreference;
+use Lightworx\FilamentPwa\DTOs\SendResult;
 use Minishlink\WebPush\WebPush;
 use Minishlink\WebPush\Subscription;
 
+/**
+ * Sends push notifications via Web Push (VAPID).
+ *
+ * All public methods accept the message payload and return a SendResult.
+ *
+ * The key behavioural change from the old device-per-preference design:
+ *   - Settings (custom_settings, phone_verified, etc.) are read from the
+ *     single UserPreference row for a phone number.
+ *   - Push subscriptions are fanned out across ALL UserDevice rows linked
+ *     to that preference, so every device the person has registered receives
+ *     the notification automatically.
+ *   - Changing a setting on one device updates the shared UserPreference row,
+ *     so the change is immediately visible on every other device.
+ */
 class PushNotificationService
 {
     private WebPush $webPush;
@@ -18,222 +31,244 @@ class PushNotificationService
     {
         $this->webPush = new WebPush([
             'VAPID' => [
-                'subject'    => config('app.url'),
-                'publicKey'  => config('webpush.vapid.public_key'),
-                'privateKey' => config('webpush.vapid.private_key'),
+                'subject'    => config('filament-pwa.vapid.subject'),
+                'publicKey'  => config('filament-pwa.vapid.public_key'),
+                'privateKey' => config('filament-pwa.vapid.private_key'),
             ],
         ]);
-
-        // Disable auto-padding so we can batch sends efficiently
-        $this->webPush->setAutomaticPadding(false);
     }
 
-    // ── Primary send methods ──────────────────────────────────────────────────
+    // ── Public API (matches existing Facade surface) ───────────────────────────
 
     /**
-     * Send a push notification to every device registered under a phone number.
-     *
-     * Usage:
-     *   app(PushNotificationService::class)
-     *       ->toPhone('+27820000000', 'Hello', 'Your order is ready', '/orders/123');
-     *
-     *   // or via the facade:
-     *   PushNotification::toPhone('+27820000000', 'Hello', 'Your order is ready');
+     * Send to a single phone number.
+     * Looks up the UserPreference for that phone and dispatches to all
+     * linked devices.
      */
     public function toPhone(
         string  $phone,
         string  $title,
-        string  $body        = '',
-        string  $url         = '/',
-        array   $extra       = [],
-        ?string $senderName  = null,
-        ?string $senderPhone = null,
+        string  $body,
+        ?string $url        = null,
+        ?string $senderName = null,
     ): SendResult {
-        $preferences = UserPreference::where('phone', $phone)
-                                     ->where('phone_verified', true)
-                                     ->get();
+        $preference = UserPreference::where('phone', $phone)->first();
 
-        if ($preferences->isEmpty()) {
-            return SendResult::noDevices($phone);
+        if (! $preference) {
+            return SendResult::noDevices();
         }
 
-        $this->persistMessages($preferences, $title, $body, $senderName, $senderPhone);
-
-        return $this->dispatch(
-            $this->subscriptionsForPreferences($preferences),
-            $title, $body, $url, $extra
-        );
+        return $this->toPreference($preference, $title, $body, $url, $senderName);
     }
 
     /**
-     * Send to multiple phone numbers in a single batch.
-     *
-     * Usage:
-     *   PushNotification::toPhones(['+27820000000', '+447911123456'], 'Alert', 'Message');
+     * Send to multiple phone numbers in one call.
+     * Returns an aggregated SendResult.
      */
     public function toPhones(
         array   $phones,
         string  $title,
-        string  $body        = '',
-        string  $url         = '/',
-        array   $extra       = [],
-        ?string $senderName  = null,
-        ?string $senderPhone = null,
+        string  $body,
+        ?string $url        = null,
+        ?string $senderName = null,
     ): SendResult {
-        $preferences = UserPreference::whereIn('phone', $phones)
-                                     ->where('phone_verified', true)
-                                     ->get();
+        $sent      = 0;
+        $failed    = 0;
+        $noDevices = 0;
 
-        $this->persistMessages($preferences, $title, $body, $senderName, $senderPhone);
+        foreach ($phones as $phone) {
+            $result = $this->toPhone($phone, $title, $body, $url, $senderName);
+            $sent      += $result->sent;
+            $failed    += $result->failed;
+            $noDevices += $result->noDevices ? 1 : 0;
+        }
 
-        return $this->dispatch(
-            $this->subscriptionsForPreferences($preferences),
-            $title, $body, $url, $extra
-        );
+        return new SendResult(sent: $sent, failed: $failed, noDevices: $noDevices === count($phones));
     }
 
     /**
-     * Send to a specific UserPreference (e.g. looked up by your own logic).
+     * Send to a specific UserPreference instance (all linked devices).
+     * This is the core dispatch method; all other methods funnel through here.
      */
     public function toPreference(
         UserPreference $preference,
-        string  $title,
-        string  $body        = '',
-        string  $url         = '/',
-        array   $extra       = [],
-        ?string $senderName  = null,
-        ?string $senderPhone = null,
+        string         $title,
+        string         $body,
+        ?string        $url        = null,
+        ?string        $senderName = null,
     ): SendResult {
-        $preferences = collect([$preference]);
-        $this->persistMessages($preferences, $title, $body, $senderName, $senderPhone);
+        // Load all push subscriptions for all devices linked to this preference
+        $subscriptions = $preference->pushSubscriptions()->get();
 
-        return $this->dispatch(
-            $this->subscriptionsForPreferences($preferences),
-            $title, $body, $url, $extra
-        );
-    }
-
-    /**
-     * Broadcast to every subscribed device.
-     * Use sparingly — intended for system-wide announcements.
-     */
-    public function broadcast(
-        string  $title,
-        string  $body        = '',
-        string  $url         = '/',
-        array   $extra       = [],
-        ?string $senderName  = null,
-        ?string $senderPhone = null,
-    ): SendResult {
-        $preferences = UserPreference::all();
-        $this->persistMessages($preferences, $title, $body, $senderName, $senderPhone);
-
-        return $this->dispatch(PushSubscription::all(), $title, $body, $url, $extra);
-    }
-
-    // ── Internals ─────────────────────────────────────────────────────────────
-
-    /**
-     * Persist a PushMessage row for every preference in the collection.
-     * These appear in each recipient's inbox at /app/messages.
-     */
-    private function persistMessages(
-        \Illuminate\Support\Collection $preferences,
-        string  $title,
-        string  $body,
-        ?string $senderName,
-        ?string $senderPhone,
-    ): void {
-        foreach ($preferences as $preference) {
-            PushMessage::create([
-                'title'             => $title,
-                'message'           => $body,
-                'sender_name'       => $senderName,
-                'sender_phone'      => $senderPhone,
-                'user_preference_id'=> $preference->id,
-                'seen'              => false,
-            ]);
-        }
-    }
-
-    private function subscriptionsForPreferences(Collection $preferences): Collection
-    {
-        return PushSubscription::whereIn('user_preference_id', $preferences->pluck('id'))->get();
-    }
-
-    private function dispatch(
-        Collection $subscriptions,
-        string     $title,
-        string     $body,
-        string     $url,
-        array      $extra
-    ): SendResult {
         if ($subscriptions->isEmpty()) {
             return SendResult::noDevices();
         }
 
-        $payload = json_encode(array_merge([
-            'title' => $title,
-            'body'  => $body,
-            'url'   => $url,
-            'icon'  => config('pwa.push_icon',  '/pwa/icons/icon-192.png'),
-            'badge' => config('pwa.push_badge', '/pwa/icons/badge-72.png'),
-            'tag'   => 'pwa-notification',
-        ], $extra));  // $extra can override any of the above
-
-        $queued = 0;
+        $payload = $this->buildPayload($title, $body, $url);
 
         foreach ($subscriptions as $sub) {
-            try {
-                $this->webPush->queueNotification(
-                    Subscription::create([
-                        'endpoint'        => $sub->endpoint,
-                        'publicKey'       => $sub->public_key,
-                        'authToken'       => $sub->auth_token,
-                        'contentEncoding' => $sub->content_encoding ?? 'aesgcm',
-                    ]),
-                    $payload
-                );
-                $queued++;
-            } catch (\Throwable $e) {
-                Log::warning('PWA: failed to queue push notification', [
+            $this->webPush->queueNotification(
+                Subscription::create([
                     'endpoint' => $sub->endpoint,
-                    'error'    => $e->getMessage(),
-                ]);
-            }
+                    'keys'     => [
+                        'p256dh' => $sub->public_key,
+                        'auth'   => $sub->auth_token,
+                    ],
+                ]),
+                $payload
+            );
         }
 
-        if ($queued === 0) {
-            return SendResult::noDevices();
+        [$sent, $failed] = $this->flush();
+
+        if ($sent > 0) {
+            $this->recordMessage($preference, $title, $body, $senderName);
         }
 
-        // Flush — actually sends all queued notifications
-        $sent  = 0;
+        return new SendResult(sent: $sent, failed: $failed, noDevices: false);
+    }
+
+    /**
+     * Broadcast to every UserPreference that has at least one subscribed device.
+     */
+    public function broadcast(
+        string  $title,
+        string  $body,
+        ?string $url        = null,
+        ?string $senderName = null,
+    ): SendResult {
+        $sent   = 0;
         $failed = 0;
-        $stale = [];
+
+        UserPreference::whereHas('devices.pushSubscriptions')
+            ->each(function (UserPreference $preference) use ($title, $body, $url, $senderName, &$sent, &$failed) {
+                $result  = $this->toPreference($preference, $title, $body, $url, $senderName);
+                $sent   += $result->sent;
+                $failed += $result->failed;
+            });
+
+        return new SendResult(sent: $sent, failed: $failed, noDevices: $sent === 0 && $failed === 0);
+    }
+
+    // ── Device management helpers (called from PWA JS layer) ──────────────────
+
+    /**
+     * Register a new device, optionally linking it to an existing preference
+     * by phone number.  If no preference exists for the phone yet, one is
+     * created.  If no phone is supplied the device is registered anonymously
+     * and can be linked later via linkDeviceToPhone().
+     *
+     * Returns the UserDevice that was created or updated.
+     */
+    public function registerDevice(string $deviceId, ?string $phone = null): UserDevice
+    {
+        $preference = null;
+
+        if ($phone) {
+            $preference = UserPreference::firstOrCreate(
+                ['phone' => $phone],
+                ['phone_verified' => false]
+            );
+        }
+
+        return UserDevice::updateOrCreate(
+            ['device_id' => $deviceId],
+            ['user_preference_id' => $preference?->id]
+        );
+    }
+
+    /**
+     * Link an anonymous (unverified) device to a preference after the user
+     * completes phone verification.
+     */
+    public function linkDeviceToPhone(string $deviceId, string $phone): ?UserDevice
+    {
+        $device     = UserDevice::where('device_id', $deviceId)->first();
+        $preference = UserPreference::where('phone', $phone)->first();
+
+        if (! $device || ! $preference) {
+            return null;
+        }
+
+        return $device->linkToPreference($preference);
+    }
+
+    /**
+     * Update a setting on the shared preference for a given device.
+     * Because settings live on UserPreference (not UserDevice), this change
+     * is immediately reflected for every other device linked to the same person.
+     */
+    public function updateSetting(string $deviceId, string $key, mixed $value): bool
+    {
+        $device = UserDevice::with('preference')->where('device_id', $deviceId)->first();
+
+        if (! $device?->preference) {
+            return false;
+        }
+
+        $device->preference->setSetting($key, $value)->save();
+
+        return true;
+    }
+
+    // ── Private helpers ────────────────────────────────────────────────────────
+
+    private function buildPayload(string $title, string $body, ?string $url): string
+    {
+        return json_encode(array_filter([
+            'title' => $title,
+            'body'  => $body,
+            'icon'  => config('filament-pwa.icons.notification', '/icons/notification.png'),
+            'badge' => config('filament-pwa.icons.badge', '/icons/badge.png'),
+            'data'  => $url ? ['url' => $url] : null,
+        ]));
+    }
+
+    /**
+     * Flush the WebPush queue and handle expired subscriptions.
+     *
+     * @return array{int, int} [$sent, $failed]
+     */
+    private function flush(): array
+    {
+        $sent   = 0;
+        $failed = 0;
 
         foreach ($this->webPush->flush() as $report) {
             if ($report->isSuccess()) {
                 $sent++;
             } else {
                 $failed++;
-                $statusCode = $report->getResponse()?->getStatusCode();
 
-                // 410 Gone = subscription expired; delete so we stop retrying
-                if ($statusCode === 410) {
-                    $endpoint = $report->getEndpoint();
-                    $stale[]  = $endpoint;
-                    PushSubscription::where('endpoint', $endpoint)->delete();
-                } else {
-                    Log::warning('PWA: push delivery failed', [
-                        'endpoint' => $report->getEndpoint(),
-                        'reason'   => $report->getReason(),
-                        'status'   => $statusCode,
-                    ]);
+                // Remove subscriptions the browser has declared expired/invalid
+                if ($report->isSubscriptionExpired()) {
+                    $endpoint = $report->getRequest()->getUri()->__toString();
+
+                    \NotificationChannels\WebPush\PushSubscription::where('endpoint', $endpoint)
+                        ->delete();
                 }
             }
         }
 
-        return new SendResult($sent, $failed, $stale);
+        return [$sent, $failed];
+    }
+
+    /**
+     * Write a PushMessage audit record to the database.
+     */
+    private function recordMessage(
+        UserPreference $preference,
+        string         $title,
+        string         $body,
+        ?string        $senderName,
+    ): void {
+        PushMessage::create([
+            'title'              => $title,
+            'message'            => $body,
+            'sender_name'        => $senderName ?? config('app.name', 'System'),
+            'sender_phone'       => null,
+            'user_preference_id' => $preference->id,
+            'seen'               => false,
+        ]);
     }
 }
