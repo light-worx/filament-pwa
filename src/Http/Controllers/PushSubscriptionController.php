@@ -83,11 +83,15 @@ class PushSubscriptionController extends Controller
             }
 
             // ── 4. Fresh unlinked device ──────────────────────────────────
+            // Use firstOrCreate rather than create — the device row may already
+            // exist (e.g. created during sendPin) but failed to match in steps
+            // 2/3 because the cookie already holds the endpoint value by the
+            // time the browser calls subscribe() again.
             if (! $device) {
-                $device = UserDevice::create([
-                    'user_preference_id' => null,
-                    'device_id'          => $endpoint,
-                ]);
+                $device = UserDevice::firstOrCreate(
+                    ['device_id' => $endpoint],
+                    ['user_preference_id' => null]
+                );
             }
         }
 
