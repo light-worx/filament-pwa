@@ -63,22 +63,28 @@ class PushSubscriptionController extends Controller
 
             // ── 3. Verified phone match ───────────────────────────────────
             if (! $device) {
-                // Find a verified preference that has no device already using
-                // this endpoint — pick the most recent one
+                // Find a verified preference that does not already have a device
+                // row for this exact endpoint — pick the most recent one.
                 $preference = UserPreference::where('phone_verified', true)
                     ->whereNotNull('phone')
-                    ->whereDoesntHave('devices.pushSubscriptions', function ($q) use ($endpoint) {
-                        $q->where('endpoint', '!=', $endpoint);
+                    ->whereDoesntHave('devices', function ($q) use ($endpoint) {
+                        $q->where('device_id', $endpoint);
                     })
                     ->latest()
                     ->first();
 
                 if ($preference) {
-                    // Create a new device linked to this existing preference
-                    $device = UserDevice::create([
-                        'user_preference_id' => $preference->id,
-                        'device_id'          => $endpoint,
-                    ]);
+                    // Device row may already exist unlinked — link it rather
+                    // than blindly creating a duplicate.
+                    $device = UserDevice::firstOrCreate(
+                        ['device_id' => $endpoint],
+                        ['user_preference_id' => $preference->id]
+                    );
+                    // If the row already existed but was unlinked, link it now
+                    if (! $device->user_preference_id) {
+                        $device->user_preference_id = $preference->id;
+                        $device->save();
+                    }
                 }
             }
 
