@@ -260,4 +260,10 @@ return [
     'push_icon'  => env('PWA_PUSH_ICON',  '/pwa/icons/icon-192.png'),
     'push_badge' => env('PWA_PUSH_BADGE', '/pwa/icons/badge-72.png'),
 
+    'vapid' => [
+        'public_key'  => env('VAPID_PUBLIC_KEY'),
+        'private_key' => env('VAPID_PRIVATE_KEY'),
+        'subject'     => env('VAPID_SUBJECT'),
+    ],
+
 ];
