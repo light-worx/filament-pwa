@@ -31,9 +31,9 @@ class PushNotificationService
     {
         $this->webPush = new WebPush([
             'VAPID' => [
-                'subject'    => config('filament-pwa.vapid.subject'),
-                'publicKey'  => config('filament-pwa.vapid.public_key'),
-                'privateKey' => config('filament-pwa.vapid.private_key'),
+                'subject'    => config('pwa.vapid.subject'),
+                'publicKey'  => config('pwa.vapid.public_key'),
+                'privateKey' => config('pwa.vapid.private_key'),
             ],
         ]);
     }
