@@ -213,17 +213,29 @@
                         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    // ── Load messages ──────────────────────────────────────────────────────
     async function loadMessages() {
         try {
             const data = await api(PWA_BASE + '/messages/list?device_id=' + encodeURIComponent(deviceId()));
             messages   = data.messages ?? [];
             renderList();
             updateBadge();
+            openFromQueryString();          // ← open specific message if arriving from a notification
         } catch (e) {
             inboxList.innerHTML =
                 `<div class="inbox-empty"><i class="bi bi-exclamation-circle"></i>Could not load messages.</div>`;
         }
+    }
+
+    // ── Deep-link: open a specific message when arriving from a push notification ─
+    function openFromQueryString() {
+        const params = new URLSearchParams(window.location.search);
+        const id     = parseInt(params.get('open'));
+        if (! id) return;
+
+        // Clean the URL immediately so a page refresh doesn't re-open the same message
+        history.replaceState({}, '', window.location.pathname);
+
+        openMessage(id);
     }
 
     // ── Render list ────────────────────────────────────────────────────────
