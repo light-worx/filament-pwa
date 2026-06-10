@@ -14,14 +14,10 @@ use Minishlink\WebPush\Subscription;
  *
  * All public methods accept the message payload and return a SendResult.
  *
- * The key behavioural change from the old device-per-preference design:
- *   - Settings (custom_settings, phone_verified, etc.) are read from the
- *     single UserPreference row for a phone number.
- *   - Push subscriptions are fanned out across ALL UserDevice rows linked
- *     to that preference, so every device the person has registered receives
- *     the notification automatically.
- *   - Changing a setting on one device updates the shared UserPreference row,
- *     so the change is immediately visible on every other device.
+ * Settings (custom_settings, phone_verified, etc.) are read from the single
+ * UserPreference row for a phone number. Push subscriptions are fanned out
+ * across ALL UserDevice rows linked to that preference, so every device the
+ * person has registered receives the notification automatically.
  */
 class PushNotificationService
 {
@@ -38,12 +34,10 @@ class PushNotificationService
         ]);
     }
 
-    // ── Public API (matches existing Facade surface) ───────────────────────────
+    // ── Public API ─────────────────────────────────────────────────────────────
 
     /**
      * Send to a single phone number.
-     * Looks up the UserPreference for that phone and dispatches to all
-     * linked devices.
      */
     public function toPhone(
         string  $phone,
@@ -51,6 +45,7 @@ class PushNotificationService
         string  $body,
         ?string $url        = null,
         ?string $senderName = null,
+        ?string $senderPhone = null,
     ): SendResult {
         $preference = UserPreference::where('phone', $phone)->first();
 
@@ -58,12 +53,11 @@ class PushNotificationService
             return SendResult::noDevices();
         }
 
-        return $this->toPreference($preference, $title, $body, $url, $senderName);
+        return $this->toPreference($preference, $title, $body, $url, $senderName, $senderPhone);
     }
 
     /**
      * Send to multiple phone numbers in one call.
-     * Returns an aggregated SendResult.
      */
     public function toPhones(
         array   $phones,
@@ -77,7 +71,7 @@ class PushNotificationService
         $noDevices = 0;
 
         foreach ($phones as $phone) {
-            $result = $this->toPhone($phone, $title, $body, $url, $senderName);
+            $result     = $this->toPhone($phone, $title, $body, $url, $senderName);
             $sent      += $result->sent;
             $failed    += $result->failed;
             $noDevices += $result->noDevices ? 1 : 0;
@@ -94,16 +88,24 @@ class PushNotificationService
         UserPreference $preference,
         string         $title,
         string         $body,
-        ?string        $url        = null,
-        ?string        $senderName = null,
+        ?string        $url         = null,
+        ?string        $senderName  = null,
+        ?string        $senderPhone = null,
     ): SendResult {
-        // Load all push subscriptions for all devices linked to this preference
         $subscriptions = $preference->pushSubscriptions()->get();
 
         if ($subscriptions->isEmpty()) {
             return SendResult::noDevices();
         }
 
+        // Write the audit record first so we have its ID to include in the
+        // notification payload — the recipient's inbox can then deep-link
+        // directly to this message when the notification is tapped.
+        $message = $this->recordMessage($preference, $title, $body, $senderName, $senderPhone);
+
+        // Build the payload with the message ID embedded in the URL so the
+        // PWA can open the correct message panel on notificationclick.
+        $url     = '/messages?open=' . $message->id;
         $payload = $this->buildPayload($title, $body, $url);
 
         foreach ($subscriptions as $sub) {
@@ -120,10 +122,6 @@ class PushNotificationService
         }
 
         [$sent, $failed] = $this->flush();
-
-        if ($sent > 0) {
-            $this->recordMessage($preference, $title, $body, $senderName);
-        }
 
         return new SendResult(sent: $sent, failed: $failed, noDevices: false);
     }
@@ -150,14 +148,11 @@ class PushNotificationService
         return new SendResult(sent: $sent, failed: $failed, noDevices: $sent === 0 && $failed === 0);
     }
 
-    // ── Device management helpers (called from PWA JS layer) ──────────────────
+    // ── Device management helpers ──────────────────────────────────────────────
 
     /**
      * Register a new device, optionally linking it to an existing preference
-     * by phone number.  If no preference exists for the phone yet, one is
-     * created.  If no phone is supplied the device is registered anonymously
-     * and can be linked later via linkDeviceToPhone().
-     *
+     * by phone number. Creates the preference if it doesn't exist yet.
      * Returns the UserDevice that was created or updated.
      */
     public function registerDevice(string $deviceId, ?string $phone = null): UserDevice
@@ -178,8 +173,7 @@ class PushNotificationService
     }
 
     /**
-     * Link an anonymous (unverified) device to a preference after the user
-     * completes phone verification.
+     * Link an anonymous device to a preference after phone verification.
      */
     public function linkDeviceToPhone(string $deviceId, string $phone): ?UserDevice
     {
@@ -196,7 +190,7 @@ class PushNotificationService
     /**
      * Update a setting on the shared preference for a given device.
      * Because settings live on UserPreference (not UserDevice), this change
-     * is immediately reflected for every other device linked to the same person.
+     * is immediately reflected on every other device for the same person.
      */
     public function updateSetting(string $deviceId, string $key, mixed $value): bool
     {
@@ -206,7 +200,7 @@ class PushNotificationService
             return false;
         }
 
-        $device->preference->setSetting($key, $value)->save();
+        $device->preference->setSetting($key, $value);
 
         return true;
     }
@@ -218,14 +212,14 @@ class PushNotificationService
         return json_encode(array_filter([
             'title' => $title,
             'body'  => $body,
-            'icon'  => config('filament-pwa.icons.notification', '/icons/notification.png'),
-            'badge' => config('filament-pwa.icons.badge', '/icons/badge.png'),
+            'icon'  => config('pwa.icons.notification', '/pwa/icons/icon-192.png'),
+            'badge' => config('pwa.icons.badge', '/pwa/icons/badge-72.png'),
             'data'  => $url ? ['url' => $url] : null,
         ]));
     }
 
     /**
-     * Flush the WebPush queue and handle expired subscriptions.
+     * Flush the WebPush queue and prune expired subscriptions.
      *
      * @return array{int, int} [$sent, $failed]
      */
@@ -240,12 +234,9 @@ class PushNotificationService
             } else {
                 $failed++;
 
-                // Remove subscriptions the browser has declared expired/invalid
                 if ($report->isSubscriptionExpired()) {
                     $endpoint = $report->getRequest()->getUri()->__toString();
-
-                    \NotificationChannels\WebPush\PushSubscription::where('endpoint', $endpoint)
-                        ->delete();
+                    \NotificationChannels\WebPush\PushSubscription::where('endpoint', $endpoint)->delete();
                 }
             }
         }
@@ -254,19 +245,21 @@ class PushNotificationService
     }
 
     /**
-     * Write a PushMessage audit record to the database.
+     * Write a PushMessage audit record and return it so the caller can
+     * embed its ID in the notification payload for deep-linking.
      */
     private function recordMessage(
         UserPreference $preference,
         string         $title,
         string         $body,
         ?string        $senderName,
-    ): void {
-        PushMessage::create([
+        ?string        $senderPhone = null,
+    ): PushMessage {
+        return PushMessage::create([
             'title'              => $title,
             'message'            => $body,
             'sender_name'        => $senderName ?? config('app.name', 'System'),
-            'sender_phone'       => null,
+            'sender_phone'       => $senderPhone,
             'user_preference_id' => $preference->id,
             'seen'               => false,
         ]);

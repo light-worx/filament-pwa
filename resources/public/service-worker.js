@@ -127,9 +127,17 @@ self.addEventListener('notificationclick', event => {
 
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windows => {
-            // Focus an existing tab at that URL if one exists
-            const match = windows.find(w => w.url === target);
-            if (match) return match.focus();
+            // If the PWA is already open, navigate it to the target URL
+            // (which may include ?open=<id>) rather than just focusing it —
+            // this ensures the correct message panel opens even if the user
+            // is already on the /messages page.
+            const existing = windows.find(w => w.url.includes(self.registration.scope));
+
+            if (existing) {
+                existing.focus();
+                return existing.navigate(target);
+            }
+
             return clients.openWindow(target);
         })
     );
