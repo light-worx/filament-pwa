@@ -184,7 +184,12 @@
 
     {{-- Core scripts --}}
     <script src="{{ asset('pwa/js/bootstrap.bundle.min.js') }}"></script>
-
+    
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/pwa/service-worker.js');
+        }
+    </script>
     <script>
         /* ── Slide menu wiring ─────────────────────────────────────── */
         const leftMenu    = document.getElementById('leftMenu');

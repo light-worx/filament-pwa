@@ -16,7 +16,7 @@ After publishing assets, add the following to your main layout:
   <meta name="theme-color" content="{{ config('pwa.theme_color') }}">
     
   <script>
-      if ('serviceWorker' in navigator') {
+      if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/pwa/service-worker.js');
       }
   </script>
