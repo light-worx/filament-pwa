@@ -221,7 +221,9 @@
     </script>
 
     {{-- Push + install logic --}}
-    <script src="{{ asset('pwa/js/push-notifications.js') }}"></script>
+    @if(config('pwa.push.enabled', true))
+        <script src="{{ asset('pwa/js/push-notifications.js') }}"></script>
+    @endif
 
     @stack('scripts')
 </body>

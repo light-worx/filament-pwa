@@ -35,11 +35,12 @@ Route::group($groupAttrs, function () {
         return view('pwa::pages.home');
     })->name('app.home');
 
-    // ── Push subscription lifecycle ───────────────────────────────────────────
-    Route::post('/subscribe',           [PushSubscriptionController::class, 'store']);
-    Route::post('/unsubscribe',         [PushSubscriptionController::class, 'destroy']);
-    Route::post('/push/expire',         [PushSubscriptionController::class, 'expire']);
-    Route::post('/push/status',         [PushSubscriptionController::class, 'status']);
+    if (config('pwa.push.enabled', true)) {
+        Route::post('/subscribe',   [PushSubscriptionController::class, 'store']);
+        Route::post('/unsubscribe', [PushSubscriptionController::class, 'destroy']);
+        Route::post('/push/expire', [PushSubscriptionController::class, 'expire']);
+        Route::post('/push/status', [PushSubscriptionController::class, 'status']);
+    }
 
     // ── Device preferences ────────────────────────────────────────────────────
     Route::post('/preferences',         [PushSubscriptionController::class, 'savePreferences']);
@@ -58,12 +59,14 @@ Route::group($groupAttrs, function () {
     Route::delete('/profile/picture',       [ProfilePictureController::class, 'destroy']);
 
     // ── Messages inbox ────────────────────────────────────────────────────────
-    Route::get('/messages',             [MessagesController::class, 'index'])->name('app.messages');
-    Route::get('/messages/list',        [MessagesController::class, 'list']);
-    Route::post('/messages/seen',       [MessagesController::class, 'markSeen']);
-    Route::post('/messages/delete',     [MessagesController::class, 'destroy']);
-    Route::post('/messages/reply',      [MessagesController::class, 'reply']);
-    Route::get('/messages/unread',      [MessagesController::class, 'unreadCount']);
+    if (config('pwa.messages.enabled', true)) {
+        Route::get('/messages',       [MessagesController::class, 'index'])->name('app.messages');
+        Route::get('/messages/list',  [MessagesController::class, 'list']);
+        Route::post('/messages/seen', [MessagesController::class, 'markSeen']);
+        Route::post('/messages/delete', [MessagesController::class, 'destroy']);
+        Route::post('/messages/reply',  [MessagesController::class, 'reply']);
+        Route::get('/messages/unread',  [MessagesController::class, 'unreadCount']);
+    }
 
 });
 

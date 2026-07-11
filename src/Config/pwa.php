@@ -79,10 +79,12 @@ return [
     |              or any other string key for future badge types
     |--------------------------------------------------------------------------
     */
-    'bottom_items' => [
-        ['icon' => 'bi-house',          'route' => 'app.home',       'label' => 'Home'],
-        ['icon' => 'bi-chat-left-text',  'route' => 'app.messages',   'label' => 'Messages', 'badge' => 'messages'],
-    ],
+    'bottom_items' => array_values(array_filter([
+        ['icon' => 'bi-house',          'route' => 'app.home',     'label' => 'Home'],
+        env('PWA_MESSAGES_ENABLED', true)
+            ? ['icon' => 'bi-chat-left-text', 'route' => 'app.messages', 'label' => 'Messages', 'badge' => 'messages']
+            : null,
+    ])),
 
     /*
     |--------------------------------------------------------------------------
@@ -210,6 +212,14 @@ return [
         'prompt_on_install' => false,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Messages inbox
+    |--------------------------------------------------------------------------
+    */
+    'messages' => [
+        'enabled' => env('PWA_MESSAGES_ENABLED', true),
+    ],
     /*
     |--------------------------------------------------------------------------
     | Profile picture uploads

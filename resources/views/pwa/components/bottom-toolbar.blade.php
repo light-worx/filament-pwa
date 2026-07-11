@@ -1,6 +1,7 @@
 <footer class="bottom-toolbar d-flex justify-content-around align-items-center fixed-bottom py-2">
 
     @foreach(config('pwa.bottom_items', []) as $item)
+        @continue(($item['badge'] ?? null) === 'messages' && ! config('pwa.messages.enabled', true))
         @php
             $href = isset($item['route'])
                 ? (Route::has($item['route']) ? route($item['route']) : '#')

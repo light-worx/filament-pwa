@@ -428,6 +428,7 @@ if ($pwaDomain) {
     @stack('pwa-user-settings')
 
     {{-- ── Inbox link (hidden until phone verified + identity resolved) ─── --}}
+    @if(config('pwa.messages.enabled', true))
     <a id="inbox-link" href="{{ $pwaBase }}/messages"
        class="card shadow-sm border-0 mb-3 text-decoration-none d-none"
        style="display:none; border-radius:14px;">
@@ -446,6 +447,7 @@ if ($pwaDomain) {
             <i class="bi bi-chevron-right text-muted" style="font-size:.75rem"></i>
         </div>
     </a>
+    @endif
 
     {{-- ── Push notifications + sign out — pinned to bottom ────────────── --}}
     <div id="push-card" class="mt-auto push-card d-none">
