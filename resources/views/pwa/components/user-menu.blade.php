@@ -240,6 +240,7 @@ if ($pwaDomain) {
         </div>
     </div>
 
+    @if(config('pwa.push.enabled', true) || config('pwa.messages.enabled', true))
     {{-- ── Phone verification (shown when NOT verified) ────────────────── --}}
     <div id="verification-card" class="card shadow-sm border-0 mb-3">
         <div class="card-body">
@@ -338,6 +339,7 @@ if ($pwaDomain) {
             </div>
         </div>
     </div>
+    @endif
 
     {{-- ── Custom fields (gated: phone must be verified) ───────────────── --}}
     @php
