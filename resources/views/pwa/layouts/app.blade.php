@@ -154,6 +154,13 @@
     @stack('head')
 </head>
 <body>
+    @php
+        $showUserMenu = config('pwa.user_menu.enabled') ?? (
+            ! empty(config('pwa.user_fields', []))
+            || config('pwa.push.enabled', true)
+            || config('pwa.messages.enabled', true)
+        );
+    @endphp
 
     {{-- Top toolbar --}}
     @include('pwa::components.top-toolbar')
@@ -165,7 +172,9 @@
 
     {{-- Right slide menu (user settings) --}}
     <div class="slide-menu right" id="rightMenu">
-        @include('pwa::components.user-menu')
+        @if($showUserMenu)
+            @include('pwa::components.user-menu')
+        @endif
     </div>
 
     {{-- Backdrop --}}

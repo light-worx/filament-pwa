@@ -11,17 +11,17 @@
     {{-- Right: install + push + user --}}
     <div class="d-flex align-items-center gap-2">
 
-        {{-- Install-to-homescreen button (hidden until beforeinstallprompt fires) --}}
         @if(config('pwa.install_prompt', true))
         <button id="installBtn" class="btn btn-outline-secondary btn-sm d-none" aria-label="Install app">
             <i class="bi bi-download"></i>
         </button>
         @endif
 
-        {{-- User settings panel --}}
+        @if($showUserMenu ?? true)
         <button id="userMenuBtn" class="btn p-1" aria-label="Open user settings">
             <i class="bi bi-person-circle fs-4"></i>
         </button>
+        @endif
 
     </div>
 </header>

@@ -88,6 +88,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | User settings panel
+    |--------------------------------------------------------------------------
+    |
+    | By default this panel is shown automatically whenever there's something
+    | in it worth showing: custom user_fields, push notifications, or the
+    | messages inbox. If all three are absent/disabled, the panel (and its
+    | trigger button) hide themselves rather than showing an empty shell.
+    |
+    | Set PWA_USER_MENU_ENABLED explicitly to true/false to override this
+    | auto-detection entirely.
+    |--------------------------------------------------------------------------
+    */
+    'user_menu' => [
+        'enabled' => env('PWA_USER_MENU_ENABLED'), // null = auto-detect
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | User settings — extra fields rendered in the right slide-over panel
     |
     | Field types: text | email | tel | number | select | toggle
