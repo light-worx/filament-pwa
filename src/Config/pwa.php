@@ -294,4 +294,5 @@ return [
         'subject'     => env('VAPID_SUBJECT'),
     ],
 
+    'default_home_route' => env('PWA_DEFAULT_HOME_ROUTE', true),
 ];

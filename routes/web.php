@@ -31,9 +31,11 @@ if ($domain) {
 
 Route::group($groupAttrs, function () {
 
-    Route::get(config('pwa.app_route', '/'), function () {
-        return view('pwa::pages.home');
-    })->name('app.home');
+    if (config('pwa.default_home_route', true)) {
+        Route::get(config('pwa.app_route', '/'), function () {
+            return view('pwa::pages.home');
+        })->name('app.home');
+    }
 
     if (config('pwa.push.enabled', true)) {
         Route::post('/subscribe',   [PushSubscriptionController::class, 'store']);
