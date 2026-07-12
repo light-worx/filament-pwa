@@ -100,7 +100,7 @@ class UserPreference extends Model
      */
     public function resolveIdentityName(): ?string
     {
-        return static::lookupNameForPhone($this->phone);
+        return static::lookupNameForPhone($this->phone) ?: $this->name;
     }
 
     /**

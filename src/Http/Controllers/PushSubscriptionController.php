@@ -229,6 +229,7 @@ class PushSubscriptionController extends Controller
         return response()->json([
             'phone'            => $preference->phone,
             'phone_verified'   => (bool) $preference->phone_verified,
+            'email'            => $preference->email,
             'resolved_name'    => $preference->resolveIdentityName(),
             'resolved_picture' => $picture,
             'custom_settings'  => $preference->custom_settings,

@@ -196,12 +196,14 @@ if ($pwaDomain) {
                         </span>
                     </div>
                     <div id="identity-phone" class="identity-phone"></div>
+                    @if(config('pwa.identity.model'))
                     <div id="identity-unknown" class="d-none mt-1">
                         <small class="text-warning">
                             <i class="bi bi-exclamation-triangle me-1"></i>
                             {{ $unknownNumberMessage }}
                         </small>
                     </div>
+                    @endif
                 </div>
             </div>
 
@@ -661,7 +663,7 @@ if ($pwaDomain) {
                     nameEl.textContent = data.resolved_name || '';
                 }
                 if (phoneEl) {
-                    phoneEl.textContent = data.phone ?? '';
+                    phoneEl.textContent = data.phone || data.email || '';
                 }
 
                 // Show unknown-number message if no name resolved
