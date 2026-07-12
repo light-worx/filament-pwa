@@ -24,9 +24,9 @@ const PRECACHE = [
 
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME)
-              .then(cache => cache.addAll(PRECACHE))
-              .then(() => self.skipWaiting())   // activate immediately
+        caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE))
+        // removed: .then(() => self.skipWaiting())
+        // — the new worker now waits until the Update button tells it to proceed
     );
 });
 
@@ -94,7 +94,11 @@ self.addEventListener('fetch', event => {
 let pushIcon  = '/pwa/icons/icon-192.png';
 let pushBadge = '/pwa/icons/badge-72.png';
 
+// same file — extend the existing message listener rather than adding a second one
 self.addEventListener('message', event => {
+    if (event.data?.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
     if (event.data?.type === 'PWA_CONFIG') {
         if (event.data.pushIcon)  pushIcon  = event.data.pushIcon;
         if (event.data.pushBadge) pushBadge = event.data.pushBadge;

@@ -17,6 +17,10 @@
         </button>
         @endif
 
+        <button id="updateBtn" class="btn btn-sm btn-warning d-none" aria-label="Update available">
+            <i class="bi bi-arrow-clockwise"></i> Update
+        </button>
+
         @if($showUserMenu ?? true)
         <button id="userMenuBtn" class="btn p-1" aria-label="Open user settings">
             <i class="bi bi-person-circle fs-4"></i>
