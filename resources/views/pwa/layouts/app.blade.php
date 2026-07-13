@@ -228,7 +228,7 @@
     @if(config('pwa.push.enabled', true))
         <script src="{{ asset('pwa/js/push-notifications.js') }}"></script>
     @endif
-    <script src="{{ asset('register.js') }}"></script>
+    <script src="{{ asset('pwa/js/register.js') }}"></script>
     @stack('scripts')
 </body>
 </html>
