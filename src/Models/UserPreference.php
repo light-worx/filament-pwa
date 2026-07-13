@@ -5,6 +5,7 @@ namespace Lightworx\FilamentPwa\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * One row per person, identified by phone number.
@@ -108,7 +109,15 @@ class UserPreference extends Model
      */
     public function resolveProfilePicture(): ?string
     {
-        return static::lookupPictureForPhone($this->phone);
+        $fromIdentity = static::lookupPictureForPhone($this->phone);
+
+        if ($fromIdentity) {
+            return $fromIdentity;
+        }
+
+        return $this->picture_path
+            ? Storage::disk(config('pwa.picture_upload.disk', 'public'))->url($this->picture_path)
+            : null;
     }
 
     /**

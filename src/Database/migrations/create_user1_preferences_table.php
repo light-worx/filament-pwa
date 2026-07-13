@@ -15,6 +15,7 @@ return new class extends Migration
             $table->string('phone', 50)->nullable()->unique()->comment('Natural key — one preference record per phone number');
             $table->json('custom_settings')->nullable()->comment('Developer-defined extra fields');
             $table->string('phone_verification_pin', 4)->nullable();
+            $table->string('picture_path')->nullable();
             $table->timestamp('pin_expires_at')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->boolean('phone_verified')->default(false);

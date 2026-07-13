@@ -26,19 +26,6 @@ class ProfilePictureController extends Controller
         return ($preference?->phone_verified) ? $preference : null;
     }
 
-    // ── Endpoints ─────────────────────────────────────────────────────────────
-
-    /**
-     * Upload a profile picture and save it directly to the identity model.
-     *
-     * The image is stored on the configured disk and the identity record's
-     * picture_field is updated — so the picture is immediately visible
-     * everywhere in the application that uses that field, not just in the PWA.
-     *
-     * Accepts either:
-     *   - Multipart POST with a 'picture' file field
-     *   - JSON POST with a 'picture_data' base64 data URI (camera captures)
-     */
     public function store(Request $request): JsonResponse
     {
         $disk  = config('pwa.picture_upload.disk', 'public');
@@ -57,22 +44,21 @@ class ProfilePictureController extends Controller
             return response()->json(['message' => 'Verified device not found.'], 403);
         }
 
-        // ── Locate the identity record ────────────────────────────────────
+        // ── Locate where to store the picture ───────────────────────────────
         $identityConfig = config('pwa.identity');
         $pictureField   = $identityConfig['picture_field'] ?? null;
+        $usingIdentity  = ! empty($identityConfig['model']) && ! empty($identityConfig['phone_field']) && $pictureField;
 
-        if (empty($identityConfig['model']) || empty($identityConfig['phone_field']) || ! $pictureField) {
-            return response()->json([
-                'message' => 'Identity model or picture_field is not configured in pwa.identity.',
-            ], 500);
-        }
+        $record = null;
 
-        $record = app($identityConfig['model'])
-            ->where($identityConfig['phone_field'], $preference->phone)
-            ->first();
+        if ($usingIdentity) {
+            $record = app($identityConfig['model'])
+                ->where($identityConfig['phone_field'], $preference->phone)
+                ->first();
 
-        if (! $record) {
-            return response()->json(['message' => 'Identity record not found for this device.'], 404);
+            if (! $record) {
+                return response()->json(['message' => 'Identity record not found for this device.'], 404);
+            }
         }
 
         // ── Extract image bytes ───────────────────────────────────────────
@@ -94,7 +80,7 @@ class ProfilePictureController extends Controller
         }
 
         // ── Delete the previous picture if stored on our disk ─────────────
-        $currentValue = data_get($record, $pictureField);
+        $currentValue = $usingIdentity ? data_get($record, $pictureField) : $preference->picture_path;
         if ($currentValue && ! str_starts_with($currentValue, 'http')) {
             Storage::disk($disk)->delete($currentValue);
         }
@@ -105,9 +91,14 @@ class ProfilePictureController extends Controller
 
         Storage::disk($disk)->put($path, $contents);
 
-        // ── Update the identity model ─────────────────────────────────────
-        $record->$pictureField = $path;
-        $record->save();
+        // ── Persist wherever the picture belongs ───────────────────────────
+        if ($usingIdentity) {
+            $record->$pictureField = $path;
+            $record->save();
+        } else {
+            $preference->picture_path = $path;
+            $preference->save();
+        }
 
         return response()->json([
             'status'      => 'uploaded',
@@ -115,9 +106,6 @@ class ProfilePictureController extends Controller
         ]);
     }
 
-    /**
-     * Remove the uploaded picture from the identity model.
-     */
     public function destroy(Request $request): JsonResponse
     {
         $data       = $request->validate(['device_id' => 'required|string']);
@@ -127,24 +115,30 @@ class ProfilePictureController extends Controller
             return response()->json(['message' => 'Verified device not found.'], 403);
         }
 
+        $disk           = config('pwa.picture_upload.disk', 'public');
         $identityConfig = config('pwa.identity');
         $pictureField   = $identityConfig['picture_field'] ?? null;
+        $usingIdentity  = ! empty($identityConfig['model']) && ! empty($identityConfig['phone_field']) && $pictureField;
 
-        if (empty($identityConfig['model']) || empty($identityConfig['phone_field']) || ! $pictureField) {
-            return response()->json(['message' => 'Identity model not configured.'], 500);
-        }
+        if ($usingIdentity) {
+            $record = app($identityConfig['model'])
+                ->where($identityConfig['phone_field'], $preference->phone)
+                ->first();
 
-        $record = app($identityConfig['model'])
-            ->where($identityConfig['phone_field'], $preference->phone)
-            ->first();
-
-        if ($record) {
-            $currentValue = data_get($record, $pictureField);
-            if ($currentValue && ! str_starts_with($currentValue, 'http')) {
-                Storage::disk($disk = config('pwa.picture_upload.disk', 'public'))->delete($currentValue);
+            if ($record) {
+                $currentValue = data_get($record, $pictureField);
+                if ($currentValue && ! str_starts_with($currentValue, 'http')) {
+                    Storage::disk($disk)->delete($currentValue);
+                }
+                $record->$pictureField = null;
+                $record->save();
             }
-            $record->$pictureField = null;
-            $record->save();
+        } else {
+            if ($preference->picture_path && ! str_starts_with($preference->picture_path, 'http')) {
+                Storage::disk($disk)->delete($preference->picture_path);
+            }
+            $preference->picture_path = null;
+            $preference->save();
         }
 
         return response()->json(['status' => 'removed', 'picture_url' => null]);
