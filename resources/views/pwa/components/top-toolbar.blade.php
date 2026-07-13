@@ -17,8 +17,8 @@
         </button>
         @endif
 
-        <button id="updateBtn" class="btn btn-sm btn-warning d-none" aria-label="Update available">
-            <i class="bi bi-arrow-clockwise"></i> Update
+        <button id="updateBtn" class="btn btn-outline-warning btn-sm d-none" aria-label="Update available" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise"></i>
         </button>
 
         @if($showUserMenu ?? true)

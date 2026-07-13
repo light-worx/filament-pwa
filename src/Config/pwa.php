@@ -9,6 +9,7 @@ return [
     */
     'app_name'    => env('PWA_APP_NAME', env('APP_NAME', 'My App')),
     'app_short'   => env('PWA_APP_SHORT', 'App'),
+    'app_version' => env('PWA_APP_VERSION', '1.0.0'),
     'description' => env('PWA_DESCRIPTION', 'A progressive web application'),
 
     /*

@@ -10,7 +10,7 @@
     <meta name="theme-color"  content="{{ config('pwa.theme.theme_color') }}">
     <meta name="csrf-token"   content="{{ csrf_token() }}">
     <meta name="vapid-key"    content="{{ config('webpush.vapid.public_key') }}">
-    <meta name="app-version"  content="{{ config('app.version', '1.0.0') }}">
+    <meta name="app-version" content="{{ config('pwa.app_version', '1.0.0') }}">
     <meta name="push-icon"    content="{{ config('pwa.push_icon',  '/pwa/icons/icon-192.png') }}">
     <meta name="push-badge"   content="{{ config('pwa.push_badge', '/pwa/icons/badge-72.png') }}">
     <meta name="flags-path"   content="{{ asset('pwa/flags') }}">
@@ -228,7 +228,7 @@
     @if(config('pwa.push.enabled', true))
         <script src="{{ asset('pwa/js/push-notifications.js') }}"></script>
     @endif
-    <script src="{{ asset('pwa/register.js') }}"></script>
+    <script src="{{ asset('register.js') }}"></script>
     @stack('scripts')
 </body>
 </html>
