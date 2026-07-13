@@ -181,7 +181,7 @@ if ($pwaDomain) {
                      aria-label="Change profile picture">
                     {{-- Populated by JS --}}
                     <div class="avatar-placeholder" id="avatar-placeholder">?</div>
-                    <img id="avatar-img" class="profile-avatar d-none" src="" alt="Profile picture">
+                    <img id="avatar-img" class="profile-avatar d-none" src="" alt="" onerror="this.classList.add('d-none'); document.getElementById('avatar-placeholder')?.classList.remove('d-none');">
                     <div class="avatar-edit-hint">
                         <i class="bi bi-camera-fill"></i>
                     </div>
